@@ -1,0 +1,30 @@
+{
+  "name": "top-heroes-stats-fetcher",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "directories": {
+    "doc": "docs"
+  },
+  "scripts": {
+    "start": "node index.js",
+    "run-now": "node index.js --run-now",
+    "test": "jest"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.102.0",
+    "@nut-tree-fork/nut-js": "^4.2.6",
+    "csv-writer": "^1.6.0",
+    "dotenv": "^17.4.2",
+    "node-cron": "^4.2.1",
+    "pocketbase": "^0.27.0",
+    "screenshot-desktop": "^1.15.4"
+  },
+  "devDependencies": {
+    "jest": "^30.4.2"
+  }
+}
