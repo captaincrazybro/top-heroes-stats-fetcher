@@ -1,5 +1,6 @@
 // src/extractor.js
 const Anthropic = require('@anthropic-ai/sdk');
+const sharp = require('sharp');
 const config = require('../config');
 
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
@@ -27,14 +28,15 @@ async function callVision(buffer, prompt) {
 }
 
 function tryParseJSON(text) {
-  try { return JSON.parse(text); } catch { return null; }
+  try { return JSON.parse(text.replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/,  '')); } catch { return null; }
 }
 
 async function detectGameState(imageBuffer) {
   const prompt = `Look at this TopHeroes game screenshot.
 Return ONLY valid JSON: {"isMainMap": true/false, "eventTitle": "string or null"}
-- isMainMap: true if the main city/town map with buildings is the main view
-- eventTitle: if a Routines/event panel is open, extract its title exactly as shown (e.g. "Guild Arms Race", "Guild Race", "Kingdom Duel"); otherwise null`;
+
+- isMainMap: true if the main city/town map with buildings is the dominant view (no panel open)
+- eventTitle: if a Routines panel is open (title "Routines" visible at the top of a panel), look at the row of icon tabs along the very bottom edge of the screen. Each tab has a small icon and a text label beneath it. Find whichever tab label exactly matches one of: "Guild Arms Race", "Guild Race", "Kingdom Duel". Return that exact string. If the Routines panel is not open, or none of those three labels are present in the bottom tab row, return null. NEVER return an empty string — use null if you are not certain.`;
 
   for (let attempt = 0; attempt < 2; attempt++) {
     const text = await callVision(imageBuffer, prompt);
@@ -53,18 +55,35 @@ Return ONLY valid JSON: {"found": true/false, "x": number, "y": number}
 - x, y: pixel coordinates of the center of the element in the image
 If found is false, omit x and y.`;
 
-  for (let attempt = 0; attempt < 2; attempt++) {
+  const scaleX = config.visionCoordScaleX ?? 1;
+  const scaleY = config.visionCoordScaleY ?? 1;
+  for (let attempt = 0; attempt < 1; attempt++) {
     const text = await callVision(imageBuffer, prompt);
     const parsed = tryParseJSON(text);
     if (parsed?.found === true && typeof parsed.x === 'number' && typeof parsed.y === 'number') {
-      return { x: Math.round(parsed.x), y: Math.round(parsed.y) };
+      return {
+        x: Math.round(parsed.x * scaleX),
+        y: Math.round(parsed.y * scaleY),
+      };
     }
     console.log(`[extractor] locateButton "${description}" failed (attempt ${attempt + 1}):`, text);
   }
   throw new Error(`Could not locate: "${description}"`);
 }
 
+async function cropForRankings(buffer) {
+  const bounds = config.rankingsCropBounds;
+  if (!bounds) return buffer;
+  try {
+    return await sharp(buffer).extract(bounds).png().toBuffer();
+  } catch (err) {
+    console.warn('[extractor] Crop failed, using full screenshot:', err.message);
+    return buffer;
+  }
+}
+
 async function extractRankings(imageBuffer) {
+  imageBuffer = await cropForRankings(imageBuffer);
   const prompt = `Look at this TopHeroes Rankings list screenshot.
 Extract ALL visible player rows. Return ONLY valid JSON:
 {"entries":[{"rank":number,"server":"#XXXXX","guild_tag":"XXX","player_name":"name","score":number}]}
@@ -72,7 +91,8 @@ Extract ALL visible player rows. Return ONLY valid JSON:
 - server: the #NNNNN server code
 - guild_tag: text inside [brackets] before the player name
 - player_name: text after the guild tag, no brackets
-- score: the numeric points value`;
+- score: the numeric points value
+IMPORTANT: There is always a pinned entry showing the current player's own position where the rank displays as "2000+" rather than a normal number. Do NOT include this entry in the results.`;
 
   for (let attempt = 0; attempt < 2; attempt++) {
     const text = await callVision(imageBuffer, prompt);

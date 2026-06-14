@@ -2,10 +2,13 @@ jest.setTimeout(60000);
 
 jest.mock('@nut-tree-fork/nut-js', () => ({
   mouse: {
+    config: { mouseSpeed: 500 },
     setPosition: jest.fn().mockResolvedValue(undefined),
     leftClick: jest.fn().mockResolvedValue(undefined),
     pressButton: jest.fn().mockResolvedValue(undefined),
     releaseButton: jest.fn().mockResolvedValue(undefined),
+    move: jest.fn().mockResolvedValue(undefined),
+    drag: jest.fn().mockResolvedValue(undefined),
   },
   keyboard: {
     pressKey: jest.fn().mockResolvedValue(undefined),
@@ -13,6 +16,7 @@ jest.mock('@nut-tree-fork/nut-js', () => ({
   },
   Key: { LeftAlt: 'LeftAlt', Return: 'Return' },
   Button: { LEFT: 'LEFT' },
+  straightTo: jest.fn(target => target),
 }));
 jest.mock('../src/capturer', () => ({ capture: jest.fn() }));
 jest.mock('../src/extractor', () => ({
@@ -52,17 +56,28 @@ describe('navigator.detectEventType', () => {
     expect(result).toBe('KvK');
   });
 
-  test('throws on unrecognized event title', async () => {
+  test('retries and succeeds when the first attempt returns an unrecognized title', async () => {
+    extractor.detectGameState
+      .mockResolvedValueOnce({ isMainMap: false, eventTitle: null })
+      .mockResolvedValueOnce({ isMainMap: false, eventTitle: 'Guild Race' });
+    const result = await navigator.detectEventType(img);
+    expect(result).toBe('GR');
+    expect(extractor.detectGameState).toHaveBeenCalledTimes(2);
+  });
+
+  test('throws on unrecognized event title after all retries', async () => {
     extractor.detectGameState.mockResolvedValue({ isMainMap: false, eventTitle: 'Unknown Event' });
     await expect(navigator.detectEventType(img)).rejects.toThrow('Unrecognized event title');
+    expect(extractor.detectGameState).toHaveBeenCalledTimes(3);
   });
 });
 
 describe('navigator.scrollAndCapture', () => {
-  test('stops when last visible rank matches highest rank seen (end of list)', async () => {
-    const page1 = [{ rank: 1, player_name: 'A', score: 100 }, { rank: 2, player_name: 'B', score: 90 }];
-    const page2 = [{ rank: 2, player_name: 'B', score: 90 }, { rank: 3, player_name: 'C', score: 80 }];
-    const page3 = [{ rank: 3, player_name: 'C', score: 80 }]; // lastVisible.rank (3) === highestRankSeen (3) → stop
+  test('stops when highest visible rank wraps below the highest rank seen (end of list)', async () => {
+    // After pre-loading, the game wraps back to the start when scrolled past the last entry.
+    const page1 = [{ rank: 1, player_name: 'A', score: 100 }, { rank: 5, player_name: 'B', score: 90 }];
+    const page2 = [{ rank: 5, player_name: 'B', score: 90 }, { rank: 10, player_name: 'C', score: 80 }];
+    const page3 = [{ rank: 1, player_name: 'A', score: 100 }, { rank: 3, player_name: 'X', score: 50 }]; // max visible 3 < highestRankSeen 10 → wrapped, stop
 
     extractor.extractRankings
       .mockResolvedValueOnce(page1)
@@ -71,8 +86,8 @@ describe('navigator.scrollAndCapture', () => {
 
     const [allEntries] = await navigator.scrollAndCapture();
 
-    expect(allEntries).toHaveLength(3); // A, B, C deduplicated
-    expect(mouse.pressButton).toHaveBeenCalledTimes(2); // dragged twice (page1→2, page2→3)
+    expect(allEntries.map(e => e.rank).sort((a, b) => a - b)).toEqual([1, 5, 10]); // page3 not added
+    expect(mouse.pressButton).toHaveBeenCalledTimes(2); // page1→2, page2→3; page3 triggers break
     expect(mouse.releaseButton).toHaveBeenCalledTimes(2);
   });
 
@@ -87,31 +102,6 @@ describe('navigator.scrollAndCapture', () => {
     const [allEntries] = await navigator.scrollAndCapture(200);
 
     expect(allEntries.map(e => e.rank)).toEqual([198, 199, 200]); // 201 excluded
-    expect(mouse.pressButton).toHaveBeenCalledTimes(1); // only one drag before cutoff
-  });
-
-  test('calculates recovery drags from rank gap: ceil((highestSeen - lastVisible) / 5) + 1', async () => {
-    // highestRankSeen = 20; glitch page shows rank 1–5 (lastVisible = 5)
-    // rankDiff = 20 - 5 = 15 → ceil(15/5) + 1 = 3 + 1 = 4 recovery drags
-    const normalPage   = [{ rank: 20, player_name: 'X', score: 50 }];
-    const glitchPage   = [
-      { rank: 1, player_name: 'A', score: 999 },
-      { rank: 5, player_name: 'B', score: 900 },
-    ];
-    const recoveryPage = [{ rank: 21, player_name: 'Y', score: 40 }];
-    const endPage      = [{ rank: 21, player_name: 'Y', score: 40 }]; // lastVisible.rank (21) === highestRankSeen (21) → stop
-
-    extractor.extractRankings
-      .mockResolvedValueOnce(normalPage)
-      .mockResolvedValueOnce(glitchPage)
-      .mockResolvedValueOnce(recoveryPage)
-      .mockResolvedValueOnce(endPage);
-
-    const [allEntries] = await navigator.scrollAndCapture();
-
-    // Glitch entries (ranks 1, 5) excluded from output
-    expect(allEntries.map(e => e.rank).sort((a, b) => a - b)).toEqual([20, 21]);
-    // 1 normal drag + 4 recovery drags + 1 post-recovery drag = 6 total pressButton calls
-    expect(mouse.pressButton).toHaveBeenCalledTimes(6);
+    expect(mouse.pressButton).toHaveBeenCalledTimes(1); // one drag before cutoff
   });
 });

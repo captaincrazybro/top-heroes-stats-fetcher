@@ -77,26 +77,34 @@ async function ensureFullscreen() {
 }
 
 async function launch() {
-  console.log('[launcher] Spawning TopHeroes...');
-  gameProcess = spawn(config.gameExePath, [], { detached: true, stdio: 'ignore' });
-  if (typeof gameProcess.unref === 'function') gameProcess.unref();
+  if (isWindowVisible(config.windowTitle)) {
+    console.log('[launcher] Existing TopHeroes instance detected — closing it...');
+    close();
+    await sleep(2000);
+  }
 
+  console.log('[launcher] Spawning TopHeroes...');
+  gameProcess = spawn(config.gameExePath, [], { detached: true, stdio: 'ignore' });  
+  if (typeof gameProcess.unref === 'function') gameProcess.unref();
+  
   console.log('[launcher] Waiting for window...');
   await waitForWindow();
-
+  
   console.log('[launcher] Waiting for game to load...');
   await waitForReady();
 
-  console.log('[launcher] Ensuring fullscreen...');
-  await ensureFullscreen();
+  // console.log('[launcher] Ensuring fullscreen...');
+  // await ensureFullscreen();
 
   console.log('[launcher] Game ready.');
 }
 
 function close() {
-  if (!gameProcess) return;
   try {
-    gameProcess.kill();
+    execSync(
+      `powershell -Command "Get-Process | Where-Object {$_.MainWindowTitle -like '*${config.windowTitle}*'} | Stop-Process -Force"`,
+      { timeout: 5000 }
+    );
     console.log('[launcher] TopHeroes closed.');
   } catch (err) {
     console.warn('[launcher] Failed to close process:', err.message);

@@ -12,4 +12,5 @@ const PocketBase = jest.fn().mockImplementation(() => ({
 }));
 
 PocketBase._mockCollection = mockCollection;
+PocketBase.default = PocketBase;
 module.exports = PocketBase;

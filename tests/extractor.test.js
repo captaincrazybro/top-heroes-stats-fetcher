@@ -34,9 +34,10 @@ describe('extractor.detectGameState', () => {
 describe('extractor.locateButton', () => {
   beforeEach(() => jest.clearAllMocks());
 
-  test('returns {x, y} when Claude responds with valid coordinates', async () => {
+  test('returns {x, y} scaled by visionCoordScaleX/Y', async () => {
     mockResponse('{"x":1415,"y":100,"found":true}');
-    const result = await extractor.locateButton(fakeBuffer, 'the Events icon');
+    const result = await extractor.locateButton(fakeBuffer, 'the Ranking button');
+    // config.visionCoordScaleX/Y = 1: no scaling applied
     expect(result).toEqual({ x: 1415, y: 100 });
   });
 
@@ -45,10 +46,10 @@ describe('extractor.locateButton', () => {
     await expect(extractor.locateButton(fakeBuffer, 'the Ranking button')).rejects.toThrow('Could not locate');
   });
 
-  test('retries once on bad JSON then throws', async () => {
+  test('throws when Claude returns bad JSON', async () => {
     mockResponse('not json');
     await expect(extractor.locateButton(fakeBuffer, 'the Ranking button')).rejects.toThrow('Could not locate');
-    expect(mockCreate).toHaveBeenCalledTimes(2);
+    expect(mockCreate).toHaveBeenCalledTimes(1);
   });
 });
 

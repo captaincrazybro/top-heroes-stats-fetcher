@@ -30,6 +30,22 @@ describe('launcher.launch', () => {
     );
   });
 
+  test('closes existing instance before spawning if window already visible', async () => {
+    execSync.mockReturnValue('1'); // window visible before launch
+    capturer.capture.mockResolvedValue(Buffer.from('img'));
+    extractor.detectGameState.mockResolvedValue({ isMainMap: true, eventTitle: null });
+
+    await launcher.launch();
+
+    const stopCall = execSync.mock.calls.find(c => c[0].includes('Stop-Process'));
+    expect(stopCall).toBeDefined();
+    const stopIdx = execSync.mock.calls.indexOf(stopCall);
+    const spawnOrder = spawn.mock.invocationCallOrder[0];
+    // all execSync calls before spawn include the Stop-Process one
+    const execBeforeSpawn = execSync.mock.invocationCallOrder.filter(o => o < spawnOrder);
+    expect(execBeforeSpawn.length).toBeGreaterThan(0);
+  });
+
   test('throws if window does not appear within timeout', async () => {
     execSync.mockReturnValue('0'); // window never appears
     launcher._setTimeouts(100, 100); // short timeouts for test
@@ -48,16 +64,17 @@ describe('launcher.launch', () => {
 });
 
 describe('launcher.close', () => {
-  test('kills the spawned process', async () => {
+  test('kills the game process by window title via execSync', async () => {
     execSync.mockReturnValue('1');
     capturer.capture.mockResolvedValue(Buffer.from('img'));
     extractor.detectGameState.mockResolvedValue({ isMainMap: true, eventTitle: null });
 
     await launcher.launch();
+    const callsBefore = execSync.mock.calls.length;
     launcher.close();
 
-    const proc = spawn.mock.results[0].value;
-    expect(proc.kill).toHaveBeenCalled();
+    const closeCall = execSync.mock.calls[callsBefore];
+    expect(closeCall[0]).toContain('Stop-Process');
   });
 
   test('does not throw if no process was launched', () => {

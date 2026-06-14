@@ -77,9 +77,10 @@ async function run() {
     // CSV always written first — safety net
     await csvWriter.write(enriched, eventType, capturedAt);
 
-    // PocketBase write is best-effort
+    // PocketBase write is best-effort — captured_at is autodate in PocketBase schema
     try {
-      await pbWriter.write(enriched, eventType);
+      const pbRecords = enriched.map(({ captured_at, ...rest }) => rest);
+      await pbWriter.write(pbRecords, eventType);
     } catch (err) {
       console.error('[run] PocketBase write failed:', err.message);
     }

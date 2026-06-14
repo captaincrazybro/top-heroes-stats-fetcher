@@ -16,7 +16,7 @@ beforeEach(() => {
 });
 
 describe('pbWriter.write for GAR', () => {
-  test('INSERTs each record into event_records collection', async () => {
+  test('INSERTs each record', async () => {
     await pbWriter.write([baseRecord], 'GAR');
     expect(mock.create).toHaveBeenCalledTimes(1);
     expect(mock.create).toHaveBeenCalledWith(baseRecord);
@@ -30,7 +30,7 @@ describe('pbWriter.write for GAR', () => {
 });
 
 describe('pbWriter.write for KvK', () => {
-  test('INSERTs each record into event_records collection', async () => {
+  test('INSERTs each record', async () => {
     const kvkRecord = { ...baseRecord, event_type: 'KvK' };
     await pbWriter.write([kvkRecord], 'KvK');
     expect(mock.create).toHaveBeenCalledWith(kvkRecord);
