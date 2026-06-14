@@ -9,7 +9,10 @@
   "scripts": {
     "start": "node index.js",
     "run-now": "node index.js --run-now",
-    "test": "jest"
+    "install-service": "node install-service.js",
+    "uninstall-service": "node uninstall-service.js",
+    "test": "jest",
+    "test:integration": "jest --config jest.integration.config.js"
   },
   "keywords": [],
   "author": "",
@@ -21,8 +24,10 @@
     "csv-writer": "^1.6.0",
     "dotenv": "^17.4.2",
     "node-cron": "^4.2.1",
+    "node-windows": "^1.0.0-beta.8",
     "pocketbase": "^0.27.0",
-    "screenshot-desktop": "^1.15.4"
+    "screenshot-desktop": "^1.15.4",
+    "sharp": "^0.34.5"
   },
   "devDependencies": {
     "jest": "^30.4.2"
