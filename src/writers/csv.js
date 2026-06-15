@@ -31,4 +31,28 @@ async function write(records, eventType, capturedAt) {
   return filePath;
 }
 
-module.exports = { write, _setOutputDir };
+async function writeRoster(records, capturedAt) {
+  if (!fs.existsSync(outputDir)) fs.mkdirSync(outputDir, { recursive: true });
+
+  const ts = capturedAt.replace('T', '_').replace(/:/g, '-').slice(0, 19);
+  const filePath = path.join(outputDir, `roster-${ts}.csv`);
+
+  const writer = createObjectCsvWriter({
+    path: filePath,
+    header: [
+      { id: 'player_name',   title: 'player_name' },
+      { id: 'rank',          title: 'rank' },
+      { id: 'influence',     title: 'influence' },
+      { id: 'castle_level',  title: 'castle_level' },
+      { id: 'last_online',   title: 'last_online' },
+      { id: 'joined',        title: 'joined' },
+      { id: 'captured_at',   title: 'captured_at' },
+    ],
+  });
+
+  await writer.writeRecords(records);
+  console.log(`[csv] roster: ${records.length} records → ${filePath}`);
+  return filePath;
+}
+
+module.exports = { write, writeRoster, _setOutputDir };
