@@ -74,6 +74,69 @@ function greedyMatch(capturedNames, existingNames, threshold) {
   };
 }
 
+// ── Vision helpers ────────────────────────────────────────────────────────────
+
+function toBase64(buffer) {
+  return buffer.toString('base64');
+}
+
+async function callVision(buffer, prompt) {
+  const response = await client.messages.create({
+    model: config.anthropicModel,
+    max_tokens: 1024,
+    messages: [{
+      role: 'user',
+      content: [
+        { type: 'image', source: { type: 'base64', media_type: 'image/png', data: toBase64(buffer) } },
+        { type: 'text', text: prompt },
+      ],
+    }],
+  });
+  return response.content[0]?.text ?? '';
+}
+
+function tryParseJSON(text) {
+  try {
+    return JSON.parse(text.replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/, ''));
+  } catch { return null; }
+}
+
+async function extractMembers(imageBuffer) {
+  const bounds = config.membersCropBounds;
+  if (bounds) {
+    try {
+      imageBuffer = await sharp(imageBuffer).extract(bounds).png().toBuffer();
+    } catch (err) {
+      console.warn('[roster] Crop failed, using full screenshot:', err.message);
+    }
+  }
+
+  const prompt = `Look at this Top Heroes guild Members screen.
+Extract ALL visible member entries. Return ONLY valid JSON:
+{"members":[{"player_name":"string","rank":"R1","influence":341000000,"castle_level":62,"last_online":"22 min ago"}]}
+
+Rules:
+- rank: the rank badge shown on the member card — one of R1, R2, R3, R4, R5
+- influence: the power/strength value converted to a full integer (341M → 341000000, 83.5M → 83500000)
+- castle_level: the numeric level shown next to the castle icon
+- last_online: the exact text shown — "Online", "22 min ago", "5 days ago", etc.
+- The R5 player appears prominently at the top of the screen — include them
+- Do NOT include yourself or any entry without a visible player name`;
+
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const text = await callVision(imageBuffer, prompt);
+    const parsed = tryParseJSON(text);
+    if (parsed?.members && Array.isArray(parsed.members)) {
+      return parsed.members.map(m => ({
+        ...m,
+        influence: parseInfluence(m.influence),
+      }));
+    }
+    console.log(`[roster] extractMembers parse failed (attempt ${attempt + 1}):`, text);
+  }
+  return [];
+}
+
 // ── Placeholders (filled in later tasks) ────────────────────────────────────
 
 async function capture() {
