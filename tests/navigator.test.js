@@ -84,7 +84,7 @@ describe('navigator.scrollAndCapture', () => {
       .mockResolvedValueOnce(page2)
       .mockResolvedValueOnce(page3);
 
-    const [allEntries] = await navigator.scrollAndCapture();
+    const [allEntries] = await navigator.scrollAndCapture('GAR');
 
     expect(allEntries.map(e => e.rank).sort((a, b) => a - b)).toEqual([1, 5, 10]); // page3 not added
     expect(mouse.pressButton).toHaveBeenCalledTimes(2); // page1→2, page2→3; page3 triggers break
@@ -99,7 +99,7 @@ describe('navigator.scrollAndCapture', () => {
       .mockResolvedValueOnce(page1)
       .mockResolvedValueOnce(page2);
 
-    const [allEntries] = await navigator.scrollAndCapture(200);
+    const [allEntries] = await navigator.scrollAndCapture('KvK', 200);
 
     expect(allEntries.map(e => e.rank)).toEqual([198, 199, 200]); // 201 excluded
     expect(mouse.pressButton).toHaveBeenCalledTimes(1); // one drag before cutoff

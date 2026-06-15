@@ -315,6 +315,11 @@ After the `kvkMaxRank` line, add:
   guildCloseButtonX: 0,
   guildCloseButtonY: 0,
 
+  // Members panel scroll gesture — separate from rankingsList scroll which is per-event-type
+  membersScrollDragX: 764,      // horizontal center of the members list — UPDATE
+  membersScrollDragFromY: 582,  // Y where drag starts (near list bottom) — UPDATE
+  membersScrollDragToY: 225,    // Y where drag ends (near list top) — UPDATE
+
   // Crop region for the members panel screenshot — UPDATE to match your screen
   membersCropBounds: { left: 500, top: 60, width: 460, height: 720 },
 
@@ -589,10 +594,10 @@ async function clickAt({ x, y }, delayMs = 800) {
 
 async function performMembersScroll() {
   mouse.config.mouseSpeed = config.scrollDragSpeedPps ?? 500;
-  await mouse.setPosition({ x: config.scrollDragX, y: config.scrollDragFromY });
+  await mouse.setPosition({ x: config.membersScrollDragX, y: config.membersScrollDragFromY });
   await mouse.pressButton(Button.LEFT);
   await sleep(200);
-  await mouse.move(straightTo({ x: config.scrollDragX, y: config.scrollDragToY }));
+  await mouse.move(straightTo({ x: config.membersScrollDragX, y: config.membersScrollDragToY }));
   await sleep(config.scrollDragLingerMs ?? 300);
   await mouse.releaseButton(Button.LEFT);
 }

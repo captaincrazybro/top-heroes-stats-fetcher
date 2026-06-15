@@ -2,7 +2,7 @@
 require('dotenv').config();
 
 module.exports = {
-  guildTag: 'WAR',
+  guildTag: 'HGS',
   windowTitle: 'Top Heroes',
   gameExePath: 'C:\\Users\\myeye\\AppData\\Local\\TopHeroes\\Launch_ExecutionStub.exe', // UPDATE: set to actual executable path
   launchTimeoutMs: 120_000,
@@ -17,15 +17,20 @@ module.exports = {
   // Tune these by checking where the rankings panel sits on screen (UPDATE).
   rankingsCropBounds: { left: 694, top: 273, width: 531, height: 461 },
 
+  // Crop region for game-state detection (event title / routines panel area).
+  // Set to null to send the full screenshot. Crop tightly around the bottom tab bar
+  // where "Guild Arms Race", "Guild Race", "Kingdom Duel" labels appear (UPDATE).
+  gameStateCropBounds: null,
+
   // Routines panel — bottom tab bar. Same position regardless of event type.
   routinesTabX: 762,
   routinesTabY: 823,
 
   // Ranking button. GR and KvK share the same position; GAR is different. UPDATE each value.
   rankingButton: {
-    GR:  { x: 963, y: 257 },
+    GR:  { x: 963, y: 245 },
     GAR: { x: 900, y: 261 },
-    KvK: { x: 963, y: 257 },   // same as GR
+    KvK: { x: 963, y: 245 },   // same as GR
   },
 
   // Tab inside the ranking view. UPDATE each value.
@@ -37,15 +42,35 @@ module.exports = {
 
   // Other button positions are located dynamically at runtime by Claude Vision.
   // Only the scroll drag region and Events icon are hardcoded.
-  scrollDragX: 764,              // horizontal center of the rankings list
-  scrollDragFromY: 582,          // placeholder — Y where drag starts (near list bottom)
-  scrollDragToY: 225,            // placeholder — Y where drag ends (near list top)
-  scrollDragSpeedPps: 1500,       // drag speed in pixels/sec — too fast and the game won't register the scroll
-  scrollDragLingerMs: 400,       // ms to hold at the end of the drag before releasing — prevents over-scroll
-  fastScrollDragSpeedPps: 2000, // speed for pre-load scrolls (pps) — faster than capture scrolls
+  // horizontal center of the rankings list
+  scrollDragX: {
+    GR: 764,
+    GAR: 764,
+    KvK: 764
+  },        
+  // placeholder — Y where drag starts (near list bottom)      
+  scrollDragFromY: {
+    GR: 592,
+    GAR: 582,
+    KvK: 582
+  },          
+  // placeholder — Y where drag ends (near list top)
+  scrollDragToY: {
+    GR: 233,
+    GAR: 225,
+    KvK: 225
+  },            
+  scrollDragSpeedPps: 1000,       // drag speed in pixels/sec — too fast and the game won't register the scroll
+  scrollDragLingerMs: 600,       // ms to hold at the end of the drag before releasing — prevents over-scroll
+  fastScrollDragSpeedPps: 1500, // speed for pre-load scrolls (pps) — faster than capture scrolls
   fastScrollDragLingerMs: 50,   // ms to hold at end of each fast drag
-  fastScrollReboundWaitMs: 100, // ms to wait between fast drags
-  fastScrollCount: 24,          // number of fast drags down (then same count back up)
+  fastScrollReboundWaitMs: 200, // ms to wait between fast drags
+  // number of fast drags down for each event (then same count back up)
+  fastScrollCount: {
+    GAR: 24,
+    GR: 50,
+    KvK: 50
+  },
   kvkMaxRank: 200,              // entries above this rank are dropped for KvK
 
   anthropicModel: 'claude-sonnet-4-6',
