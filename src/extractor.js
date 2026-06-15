@@ -32,15 +32,6 @@ function tryParseJSON(text) {
 }
 
 async function detectGameState(imageBuffer) {
-  const bounds = config.gameStateCropBounds;
-  if (bounds) {
-    try {
-      imageBuffer = await sharp(imageBuffer).extract(bounds).png().toBuffer();
-    } catch (err) {
-      console.warn('[extractor] detectGameState crop failed, using full screenshot:', err.message);
-    }
-  }
-
   const prompt = `Look at this TopHeroes game screenshot.
 Return ONLY valid JSON: {"isMainMap": true/false, "eventTitle": "string or null"}
 

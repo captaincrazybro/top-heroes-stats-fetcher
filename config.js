@@ -17,11 +17,6 @@ module.exports = {
   // Tune these by checking where the rankings panel sits on screen (UPDATE).
   rankingsCropBounds: { left: 694, top: 273, width: 531, height: 461 },
 
-  // Crop region for game-state detection (event title / routines panel area).
-  // Set to null to send the full screenshot. Crop tightly around the bottom tab bar
-  // where "Guild Arms Race", "Guild Race", "Kingdom Duel" labels appear (UPDATE).
-  gameStateCropBounds: null,
-
   // Routines panel — bottom tab bar. Same position regardless of event type.
   routinesTabX: 762,
   routinesTabY: 823,
@@ -74,12 +69,12 @@ module.exports = {
   kvkMaxRank: 200,              // entries above this rank are dropped for KvK
 
   // Guild roster navigation — pixel coords, UPDATE to match your screen
-  guildButtonX: 0,
-  guildButtonY: 0,
-  membersPanelButtonX: 0,
-  membersPanelButtonY: 0,
-  guildCloseButtonX: 0,
-  guildCloseButtonY: 0,
+  guildButtonX: 1487,
+  guildButtonY: 542,
+  membersPanelButtonX: 875,
+  membersPanelButtonY: 770,
+  guildCloseButtonX: 561,
+  guildCloseButtonY: 828,
 
   // Members panel scroll gesture — separate from rankingsList scroll which is per-event-type
   membersScrollDragX: 764,      // horizontal center of the members list — UPDATE
