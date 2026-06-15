@@ -181,6 +181,13 @@ async function scrollAndCapture() {
   return [...seen.values()];
 }
 
+// ── Navigation ────────────────────────────────────────────────────────────────
+
+async function navigate() {
+  await clickAt({ x: config.guildButtonX,       y: config.guildButtonY });
+  await clickAt({ x: config.membersPanelButtonX, y: config.membersPanelButtonY });
+}
+
 // ── Placeholders (filled in later tasks) ────────────────────────────────────
 
 async function capture() {
