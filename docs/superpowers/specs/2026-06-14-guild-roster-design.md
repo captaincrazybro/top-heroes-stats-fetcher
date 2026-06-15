@@ -232,3 +232,35 @@ Unit-testable functions in `src/roster.js`:
 - `parseInfluence(str)` — converts `"83.5M"` → `83500000`
 
 The sync logic (`syncToPocketBase`) and navigation (`navigate`, `scrollAndCapture`) are not unit tested — they require live PocketBase and a running game respectively.
+
+## Phase 2 — Event Stats Attribution (out of scope for current implementation)
+
+> **Prerequisite:** Roster capture must be running reliably in production before this phase begins.
+
+Once the roster is stable, each event stats record in `topHeroesEventRecords` will be attributed to its matching roster entry by storing the roster record's PocketBase `id`.
+
+### Schema change
+
+Add one nullable field to `topHeroesEventRecords`:
+
+| Field | Type | Example | Notes |
+|---|---|---|---|
+| `roster_id` | string | `"abc123xyz"` | PocketBase id of the matching `guildRoster` record; `null` if no confident match |
+
+### Attribution logic
+
+After `roster.capture()` runs and the in-memory roster records are available, the enrichment step in `run()` passes the roster into the event stats writer. For each event record, a fuzzy name lookup is performed against the current session's captured roster (already in memory — no extra PocketBase fetch needed):
+
+1. Compute `similarity(eventRecord.player_name, rosterEntry.player_name)` for all roster entries
+2. Apply the same one-to-one greedy assignment and ambiguity guard used in roster sync (reuse the shared `greedyMatch` utility from `roster.js`)
+3. If a confident, unambiguous match is found: set `roster_id` to that roster entry's PocketBase `id`
+4. If no match or ambiguous: set `roster_id` to `null`; log the unmatched name
+
+The same `rosterMatchThreshold` and `rosterAmbiguityGap` config values are reused.
+
+### Implementation notes
+
+- `greedyMatch` is exported from `roster.js` so `index.js` can import it without duplicating the algorithm
+- Roster records passed to attribution must include their PocketBase `id` field (returned by `getFullList()` in the sync step)
+- If roster capture failed for the current run, `roster_id` is `null` for all event records that run — no attribution attempted on a failed roster
+- Existing event records are not backfilled; attribution applies only to records written after Phase 2 ships
