@@ -1,6 +1,5 @@
 // src/navigator.js
 const { mouse, Button, straightTo } = require('@nut-tree-fork/nut-js');
-const sharp = require('sharp');
 const config = require('../config');
 const capturer = require('./capturer');
 const extractor = require('./extractor');
@@ -32,39 +31,39 @@ async function detectEventType(imageBuffer) {
   throw new Error(`Unrecognized event title: "${lastTitle}"`);
 }
 
-async function performDragScroll(eventType) {
+async function performDragScroll() {
   mouse.config.mouseSpeed = config.scrollDragSpeedPps ?? 500;
-  await mouse.setPosition({ x: config.scrollDragX[eventType], y: config.scrollDragFromY[eventType] });
+  await mouse.setPosition({ x: config.scrollDragX, y: config.scrollDragFromY });
   await mouse.pressButton(Button.LEFT);
   await sleep(200);
-  await mouse.move(straightTo({ x: config.scrollDragX[eventType], y: config.scrollDragToY[eventType] }));
+  await mouse.move(straightTo({ x: config.scrollDragX, y: config.scrollDragToY }));
   await sleep(config.scrollDragLingerMs ?? 300);
   await mouse.releaseButton(Button.LEFT);
 }
 
 // direction 'down' scrolls the list toward lower ranks (fromY→toY); 'up' reverses to go back.
-async function performFastDragScroll(eventType, direction = 'down') {
+async function performFastDragScroll(direction = 'down') {
   mouse.config.mouseSpeed = config.fastScrollDragSpeedPps ?? 2000;
-  const fromY = direction === 'down' ? config.scrollDragFromY[eventType] : config.scrollDragToY[eventType];
-  const toY   = direction === 'down' ? config.scrollDragToY[eventType]   : config.scrollDragFromY[eventType];
-  await mouse.setPosition({ x: config.scrollDragX[eventType], y: fromY });
+  const fromY = direction === 'down' ? config.scrollDragFromY : config.scrollDragToY;
+  const toY   = direction === 'down' ? config.scrollDragToY   : config.scrollDragFromY;
+  await mouse.setPosition({ x: config.scrollDragX, y: fromY });
   await mouse.pressButton(Button.LEFT);
   // await sleep(30);
-  await mouse.move(straightTo({ x: config.scrollDragX[eventType], y: toY }));
+  await mouse.move(straightTo({ x: config.scrollDragX, y: toY }));
   // await sleep(config.fastScrollDragLingerMs ?? 50);
   await mouse.releaseButton(Button.LEFT);
   await sleep(config.fastScrollReboundWaitMs ?? 100);
 }
 
-async function preloadRankingsList(eventType) {
-  const count = config.fastScrollCount[eventType] ?? 24;
+async function preloadRankingsList() {
+  const count = config.fastScrollCount ?? 24;
   console.log(`[navigator] Pre-loading rankings (${count}↓ + ${count}↑ fast scrolls)...`);
-  for (let i = 0; i < count; i++) await performFastDragScroll(eventType, 'down');
-  for (let i = 0; i < count; i++) await performFastDragScroll(eventType, 'up');
+  for (let i = 0; i < count; i++) await performFastDragScroll('down');
+  for (let i = 0; i < count; i++) await performFastDragScroll('up');
   console.log('[navigator] Pre-load complete.');
 }
 
-async function scrollAndCapture(eventType, maxRank = Infinity) {
+async function scrollAndCapture(maxRank = Infinity) {
   const seen = new Map();
   let highestRankSeen = 0;
 
@@ -94,24 +93,16 @@ async function scrollAndCapture(eventType, maxRank = Infinity) {
     }
     if (hitCutoff) break;
 
-    await performDragScroll(eventType);
+    await performDragScroll();
   }
 
   return [[...seen.values()]];
 }
 
 async function dismissPopupIfPresent() {
-  let img = await capturer.capture();
-  const bounds = config.popupCropBounds;
-  if (bounds) {
-    try {
-      img = await sharp(img).extract(bounds).png().toBuffer();
-    } catch (err) {
-      console.warn('[navigator] dismissPopupIfPresent crop failed, using full screenshot:', err.message);
-    }
-  }
+  const img = await capturer.capture();
   try {
-    const coords = await extractor.locateButton(img, 'red circular X button at the bottom center or top right of a popup or notification dialog');
+    const coords = await extractor.locateButton(img, 'red circular X button at the bottom center of a popup or notification dialog');
     await clickAt(coords, 1000);
     console.log('[navigator] Dismissed startup popup');
   } catch {
@@ -141,11 +132,11 @@ async function navigate() {
   await clickAt(config.rankingTab[eventType], 800);
 
   // 6. Pre-load the full rankings list so it stays in the game's scroll buffer
-  await preloadRankingsList(eventType);
+  await preloadRankingsList();
 
   // 7. Scroll through and capture rankings — KvK: cap at rank 200
   const maxRank = eventType === 'KvK' ? config.kvkMaxRank : Infinity;
-  const pages = await scrollAndCapture(eventType, maxRank);
+  const pages = await scrollAndCapture(maxRank);
 
   return { eventType, pages };
 }
