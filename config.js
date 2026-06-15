@@ -22,6 +22,10 @@ module.exports = {
   // where "Guild Arms Race", "Guild Race", "Kingdom Duel" labels appear (UPDATE).
   gameStateCropBounds: null,
 
+  // Crop region for dismissPopupIfPresent() — crop to the area where popups appear.
+  // Set to null to send the full screenshot (UPDATE).
+  popupCropBounds: null,
+
   // Routines panel — bottom tab bar. Same position regardless of event type.
   routinesTabX: 762,
   routinesTabY: 823,
