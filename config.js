@@ -79,20 +79,20 @@ module.exports = {
   // 5-click setup sequence run before member capture to ensure all members are visible.
   // Clicks 1 and 5 share the same coords; clicks 2–4 are distinct. UPDATE each entry.
   membersSetupClicks: [
-    { x: 0, y: 0 },
-    { x: 0, y: 0 },
-    { x: 0, y: 0 },
-    { x: 0, y: 0 },
-    { x: 0, y: 0 },
+    { x: 968, y: 429 },
+    { x: 969, y: 559 },
+    { x: 969, y: 516 },
+    { x: 970, y: 472 },
+    { x: 968, y: 429 },
   ],
 
   // Members panel scroll gesture — separate from rankingsList scroll which is per-event-type
   membersScrollDragX: 764,      // horizontal center of the members list — UPDATE
   membersScrollDragFromY: 780,  // Y where drag starts (near list bottom) — UPDATE
-  membersScrollDragToY: 415,    // Y where drag ends (near list top) — UPDATE
+  membersScrollDragToY: 420,    // Y where drag ends (near list top) — UPDATE
 
   // Crop region for the members panel screenshot — UPDATE to match your screen
-  membersCropBounds: { left: 655, top: 82, width: 353, height: 710 },
+  membersCropBounds: { left: 655, top: 82, width: 608, height: 906 },
 
   // Fuzzy sync tuning
   rosterMatchThreshold: 0.85,
@@ -104,6 +104,6 @@ module.exports = {
     email:                  process.env.POCKETBASE_EMAIL,
     password:               process.env.POCKETBASE_PASSWORD,
     collection:             'topHeroesEventRecords',
-    rosterCollection:       'guildRoster',
+    rosterCollection:       'topHeroesGuildRoster',
   },
 };

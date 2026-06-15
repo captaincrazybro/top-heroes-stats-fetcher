@@ -99,21 +99,7 @@ async function scrollAndCapture(eventType, maxRank = Infinity) {
   return [[...seen.values()]];
 }
 
-async function dismissPopupIfPresent() {
-  const img = await capturer.capture();
-  try {
-    const coords = await extractor.locateButton(img, 'red circular X button at the bottom center of a popup or notification dialog');
-    await clickAt(coords, 1000);
-    console.log('[navigator] Dismissed startup popup');
-  } catch {
-    // No popup present — continue normally
-  }
-}
-
 async function navigate() {
-  // 0. Dismiss any startup popup (e.g. "Rival Combat Day is coming")
-  await dismissPopupIfPresent();
-
   // 1. Open event screen
   await clickAt({ x: config.eventsIconX, y: config.eventsIconY }, 1000);
 

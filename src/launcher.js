@@ -38,6 +38,17 @@ async function waitForWindow(intervalMs = 2000) {
   throw new Error(`timed out waiting for window: ${config.windowTitle}`);
 }
 
+async function dismissPopupIfPresent() {
+  const img = await capturer.capture();
+  try {
+    const coords = await extractor.locateButton(img, 'red circular X button at the bottom center or top left of a popup or notification dialog');
+    await clickAt(coords, 1000);
+    console.log('[navigator] Dismissed startup popup');
+  } catch {
+    // No popup present — continue normally
+  }
+}
+
 async function waitForReady(intervalMs = 5000) {
   const deadline = Date.now() + loadTimeoutMs;
   while (Date.now() < deadline) {
@@ -93,8 +104,8 @@ async function launch() {
   console.log('[launcher] Waiting for game to load...');
   await waitForReady();
 
-  // console.log('[launcher] Ensuring fullscreen...');
-  // await ensureFullscreen();
+  // Dismiss any startup popup (e.g. "Rival Combat Day is coming")
+  await dismissPopupIfPresent();
 
   console.log('[launcher] Game ready.');
 }
