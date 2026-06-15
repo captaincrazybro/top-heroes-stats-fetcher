@@ -7,6 +7,7 @@ const state      = require('./src/state');
 const csvWriter  = require('./src/writers/csv');
 const pbWriter   = require('./src/writers/pocketbase');
 const config     = require('./config');
+const roster    = require('./src/roster');
 
 function todayUTC() {
   return new Date().toISOString().slice(0, 10);
@@ -54,6 +55,17 @@ async function run() {
   await launcher.launch();
 
   try {
+    // 1. Roster first — game on main map, guild panel not yet open
+    try {
+      const { records, capturedAt: rosterAt } = await roster.capture();
+      await csvWriter.writeRoster(records, rosterAt);
+      console.log(`[run] Roster: ${records.length} members captured`);
+    } catch (err) {
+      console.error('[run] Roster capture failed:', err.message);
+      // non-fatal — continue to event stats; game should still be near main map
+    }
+
+    // 2. Event stats — roster.capture() left the game on the main map
     const { eventType, pages } = await navigator.navigate();
 
     // GAR and KvK: skip the final day of the event week (Sunday 2:50 AM UTC).
