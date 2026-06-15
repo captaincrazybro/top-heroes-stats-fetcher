@@ -159,6 +159,12 @@ async function performMembersScroll() {
   await mouse.releaseButton(Button.LEFT);
 }
 
+async function performMembersSetup() {
+  for (const coords of config.membersSetupClicks) {
+    await clickAt(coords);
+  }
+}
+
 async function scrollAndCapture() {
   const seen = new Map(); // player_name → entry
   const maxPasses = config.membersScrollMaxPasses ?? 50;
@@ -272,6 +278,7 @@ async function capture() {
   const capturedAt = new Date().toISOString();
 
   await navigate();
+  await performMembersSetup();
   const records = await scrollAndCapture();
   await syncToPocketBase(records, capturedAt);
   // Two back presses: members screen → guild panel → main map

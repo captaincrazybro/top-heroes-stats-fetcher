@@ -76,13 +76,23 @@ module.exports = {
   guildCloseButtonX: 561,
   guildCloseButtonY: 828,
 
+  // 5-click setup sequence run before member capture to ensure all members are visible.
+  // Clicks 1 and 5 share the same coords; clicks 2–4 are distinct. UPDATE each entry.
+  membersSetupClicks: [
+    { x: 0, y: 0 },
+    { x: 0, y: 0 },
+    { x: 0, y: 0 },
+    { x: 0, y: 0 },
+    { x: 0, y: 0 },
+  ],
+
   // Members panel scroll gesture — separate from rankingsList scroll which is per-event-type
   membersScrollDragX: 764,      // horizontal center of the members list — UPDATE
-  membersScrollDragFromY: 582,  // Y where drag starts (near list bottom) — UPDATE
-  membersScrollDragToY: 225,    // Y where drag ends (near list top) — UPDATE
+  membersScrollDragFromY: 780,  // Y where drag starts (near list bottom) — UPDATE
+  membersScrollDragToY: 415,    // Y where drag ends (near list top) — UPDATE
 
   // Crop region for the members panel screenshot — UPDATE to match your screen
-  membersCropBounds: { left: 500, top: 60, width: 460, height: 720 },
+  membersCropBounds: { left: 655, top: 82, width: 353, height: 710 },
 
   // Fuzzy sync tuning
   rosterMatchThreshold: 0.85,
