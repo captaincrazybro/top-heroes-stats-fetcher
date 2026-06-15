@@ -161,8 +161,9 @@ async function performMembersScroll() {
 
 async function scrollAndCapture() {
   const seen = new Map(); // player_name → entry
+  const maxPasses = config.membersScrollMaxPasses ?? 50;
 
-  while (true) {
+  for (let pass = 0; pass < maxPasses; pass++) {
     const prevSize = seen.size;
     const img = await capturer.capture();
     const entries = await extractMembers(img);
