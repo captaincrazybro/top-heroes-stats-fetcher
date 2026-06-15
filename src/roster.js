@@ -278,8 +278,9 @@ async function capture() {
   await clickAt({ x: config.guildCloseButtonX, y: config.guildCloseButtonY });
   await clickAt({ x: config.guildCloseButtonX, y: config.guildCloseButtonY });
 
-  console.log(`[roster] Captured ${records.length} members`);
-  return { records, capturedAt };
+  const enriched = records.map(r => ({ ...r, joined: true, captured_at: capturedAt }));
+  console.log(`[roster] Captured ${enriched.length} members`);
+  return { records: enriched, capturedAt };
 }
 
 module.exports = { capture, greedyMatch, levenshteinDistance, similarity, parseInfluence };
