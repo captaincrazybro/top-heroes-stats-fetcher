@@ -266,10 +266,20 @@ async function syncToPocketBase(capturedRecords, capturedAt) {
   console.log(`[roster] ${matched.length} matched (${rejoined} rejoined), ${newPlayers.length} new, ${departed.length} departed`);
 }
 
-// ── Placeholders (filled in later tasks) ────────────────────────────────────
+// ── Top-level export ──────────────────────────────────────────────────────────
 
 async function capture() {
-  throw new Error('Not yet implemented');
+  const capturedAt = new Date().toISOString();
+
+  await navigate();
+  const records = await scrollAndCapture();
+  await syncToPocketBase(records, capturedAt);
+  // Two back presses: members screen → guild panel → main map
+  await clickAt({ x: config.guildCloseButtonX, y: config.guildCloseButtonY });
+  await clickAt({ x: config.guildCloseButtonX, y: config.guildCloseButtonY });
+
+  console.log(`[roster] Captured ${records.length} members`);
+  return { records, capturedAt };
 }
 
 module.exports = { capture, greedyMatch, levenshteinDistance, similarity, parseInfluence };
