@@ -15,7 +15,7 @@ function todayUTC() {
 
 // Returns true if the current UTC time falls within the final day of the event week
 // (Sunday 00:00–02:59 UTC, i.e. after Saturday's reset but before Sunday's 3 AM reset).
-// The bot runs at 2:50 AM UTC, so UTC day === Sunday means we're in the last 10 min of
+// The bot runs at 2:45 AM UTC, so UTC day === Sunday means we're in the last 15 min of
 // the Saturday→Sunday overnight period — event has ended for GAR/KvK.
 function isFinalEventDay() {
   return new Date().getUTCDay() === 0; // 0 = Sunday
