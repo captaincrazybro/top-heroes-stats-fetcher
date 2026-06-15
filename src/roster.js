@@ -27,14 +27,16 @@ function levenshteinDistance(a, b) {
 
 function similarity(a, b) {
   const al = a.toLowerCase(), bl = b.toLowerCase();
+  if (al.length === 0 && bl.length === 0) return 1;
+  if (al.length === 0 || bl.length === 0) return 0;
   const dist = levenshteinDistance(al, bl);
   return 1 - dist / Math.max(al.length, bl.length);
 }
 
 function parseInfluence(str) {
-  if (typeof str === 'number') return str;
+  if (typeof str === 'number') return Math.round(str);
   const s = String(str).trim().replace(/,/g, '');
-  const match = s.match(/^([\d.]+)([MKB]?)$/i);
+  const match = s.match(/^([\d.]+)\s*([MKB]?)$/i);
   if (!match) return 0;
   const num = parseFloat(match[1]);
   const suffix = match[2].toUpperCase();

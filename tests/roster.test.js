@@ -35,6 +35,13 @@ describe('similarity', () => {
   test('one char off on a 4-char string → 0.75', () => {
     expect(similarity('Nyra', 'Nyda')).toBeCloseTo(0.75);
   });
+  test('two empty strings → 1.0', () => {
+    expect(similarity('', '')).toBe(1.0);
+  });
+  test('one empty string → 0.0', () => {
+    expect(similarity('', 'x')).toBe(0.0);
+    expect(similarity('x', '')).toBe(0.0);
+  });
 });
 
 describe('parseInfluence', () => {
