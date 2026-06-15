@@ -821,6 +821,8 @@ async function capture() {
   await navigate();
   const records = await scrollAndCapture();
   await syncToPocketBase(records, capturedAt);
+  // Two back presses: members screen → guild panel → main map
+  await clickAt({ x: config.guildCloseButtonX, y: config.guildCloseButtonY });
   await clickAt({ x: config.guildCloseButtonX, y: config.guildCloseButtonY });
 
   console.log(`[roster] Captured ${records.length} members`);
