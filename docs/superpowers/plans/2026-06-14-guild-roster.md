@@ -104,53 +104,43 @@ describe('parseInfluence', () => {
 
 describe('greedyMatch', () => {
   test('exact match → matched', () => {
-    const r = greedyMatch(['Nyra'], ['Nyra'], 0.85, 0.05);
+    const r = greedyMatch(['Nyra'], ['Nyra'], 0.85);
     expect(r.matched).toHaveLength(1);
     expect(r.matched[0]).toMatchObject({ capturedIndex: 0, existingIndex: 0 });
     expect(r.newPlayers).toHaveLength(0);
     expect(r.departed).toHaveLength(0);
-    expect(r.ambiguous).toHaveLength(0);
   });
 
   test('below-threshold captured → newPlayer', () => {
-    const r = greedyMatch(['Zyxqwv'], ['Nyra'], 0.85, 0.05);
+    const r = greedyMatch(['Zyxqwv'], ['Nyra'], 0.85);
     expect(r.matched).toHaveLength(0);
     expect(r.newPlayers).toEqual([0]);
     expect(r.departed).toEqual([0]);
   });
 
   test('unmatched existing → departed', () => {
-    const r = greedyMatch(['Alice'], ['Alice', 'Bob'], 0.85, 0.05);
+    const r = greedyMatch(['Alice'], ['Alice', 'Bob'], 0.85);
     expect(r.matched).toHaveLength(1);
     expect(r.departed).toEqual([1]);
   });
 
   test('one-to-one: two captures cannot both claim same existing', () => {
     // 'Alexandrow' (ci=1) scores 1.0; 'Alexandros' (ci=0) scores 0.9 — existing is taken first
-    const r = greedyMatch(['Alexandros', 'Alexandrow'], ['Alexandrow'], 0.85, 0.05);
+    const r = greedyMatch(['Alexandros', 'Alexandrow'], ['Alexandrow'], 0.85);
     expect(r.matched).toHaveLength(1);
     expect(r.matched[0].capturedIndex).toBe(1);
     expect(r.newPlayers).toContain(0);
     expect(r.departed).toHaveLength(0);
   });
 
-  test('ambiguous match → not merged, not inserted, not departed', () => {
-    // sim('alexandrx', 'alexandra') = 8/9 ≈ 0.889; same for 'alexandrb' — gap = 0 < 0.05
-    const r = greedyMatch(['Alexandrx'], ['Alexandra', 'Alexandrb'], 0.85, 0.05);
-    expect(r.ambiguous).toContain(0);
-    expect(r.matched).toHaveLength(0);
-    expect(r.newPlayers).toHaveLength(0);  // not inserted
-    expect(r.departed).toHaveLength(0);    // not marked departed
-  });
-
   test('empty captured → all existing departed', () => {
-    const r = greedyMatch([], ['Alice', 'Bob'], 0.85, 0.05);
+    const r = greedyMatch([], ['Alice', 'Bob'], 0.85);
     expect(r.matched).toHaveLength(0);
     expect(r.departed).toEqual([0, 1]);
   });
 
   test('empty existing → all captured new', () => {
-    const r = greedyMatch(['Alice', 'Bob'], [], 0.85, 0.05);
+    const r = greedyMatch(['Alice', 'Bob'], [], 0.85);
     expect(r.matched).toHaveLength(0);
     expect(r.newPlayers).toEqual([0, 1]);
   });
@@ -214,29 +204,9 @@ function parseInfluence(str) {
   return Math.round(num);
 }
 
-function greedyMatch(capturedNames, existingNames, threshold, ambiguityGap) {
-  const ambiguousCaptured = new Set();
-  const protectedExisting = new Set();
-
-  for (let ci = 0; ci < capturedNames.length; ci++) {
-    if (existingNames.length === 0) break;
-    const scores = existingNames
-      .map((name, ei) => ({ ei, score: similarity(capturedNames[ci], name) }))
-      .sort((a, b) => b.score - a.score);
-    const best = scores[0].score;
-    const second = scores.length > 1 ? scores[1].score : 0;
-    if (best >= threshold && best - second < ambiguityGap) {
-      ambiguousCaptured.add(ci);
-      protectedExisting.add(scores[0].ei);
-      if (scores.length > 1 && scores[1].score >= threshold) {
-        protectedExisting.add(scores[1].ei);
-      }
-    }
-  }
-
+function greedyMatch(capturedNames, existingNames, threshold) {
   const triples = [];
   for (let ci = 0; ci < capturedNames.length; ci++) {
-    if (ambiguousCaptured.has(ci)) continue;
     for (let ei = 0; ei < existingNames.length; ei++) {
       const score = similarity(capturedNames[ci], existingNames[ei]);
       if (score >= threshold) triples.push({ ci, ei, score });
@@ -244,8 +214,8 @@ function greedyMatch(capturedNames, existingNames, threshold, ambiguityGap) {
   }
   triples.sort((a, b) => b.score - a.score);
 
-  const assignedCaptured = new Set([...ambiguousCaptured]);
-  const assignedExisting = new Set([...protectedExisting]);
+  const assignedCaptured = new Set();
+  const assignedExisting = new Set();
   const matched = [];
 
   for (const { ci, ei, score } of triples) {
@@ -259,7 +229,6 @@ function greedyMatch(capturedNames, existingNames, threshold, ambiguityGap) {
     matched,
     newPlayers: capturedNames.map((_, i) => i).filter(i => !assignedCaptured.has(i)),
     departed:   existingNames.map((_, i) => i).filter(i => !assignedExisting.has(i)),
-    ambiguous:  [...ambiguousCaptured],
   };
 }
 
@@ -325,7 +294,6 @@ After the `kvkMaxRank` line, add:
 
   // Fuzzy sync tuning
   rosterMatchThreshold: 0.85,
-  rosterAmbiguityGap: 0.05,
 ```
 
 Then inside the `pb` object, add `rosterCollection`:
@@ -723,11 +691,10 @@ async function syncToPocketBase(capturedRecords, capturedAt) {
   const capturedNames = capturedRecords.map(r => r.player_name);
   const existingNames = existing.map(r => r.player_name);
 
-  const { matched, newPlayers, departed, ambiguous } = greedyMatch(
+  const { matched, newPlayers, departed } = greedyMatch(
     capturedNames,
     existingNames,
-    config.rosterMatchThreshold,
-    config.rosterAmbiguityGap
+    config.rosterMatchThreshold
   );
 
   let rejoined = 0;
@@ -766,11 +733,7 @@ async function syncToPocketBase(capturedRecords, capturedAt) {
     await pb.collection(col).update(ex.id, { joined: false });
   }
 
-  for (const ci of ambiguous) {
-    console.warn(`[roster] Ambiguous match for "${capturedRecords[ci].player_name}" — skipped`);
-  }
-
-  console.log(`[roster] ${matched.length} matched (${rejoined} rejoined), ${newPlayers.length} new, ${departed.length} departed, ${ambiguous.length} ambiguous (review log)`);
+  console.log(`[roster] ${matched.length} matched (${rejoined} rejoined), ${newPlayers.length} new, ${departed.length} departed`);
 }
 ```
 
@@ -945,8 +908,7 @@ After completing all tasks, verify against the spec:
 
 - [ ] `levenshteinDistance` and `similarity` are pure and case-insensitive ✓
 - [ ] `parseInfluence` handles M/K/B suffix and plain numbers ✓
-- [ ] `greedyMatch` returns `{ matched, newPlayers, departed, ambiguous }` ✓
-- [ ] Ambiguous captures protect the top-2 existing candidates from `departed` ✓
+- [ ] `greedyMatch` returns `{ matched, newPlayers, departed }` ✓
 - [ ] `main_queue_influence` / `main_queue_faction` never appear in update payloads ✓
 - [ ] On insert, both manual fields are set to `null` ✓
 - [ ] Departed records get `joined = false` (not deleted) ✓
