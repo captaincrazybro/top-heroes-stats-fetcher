@@ -6,7 +6,7 @@
 
 ## Overview
 
-An additional routine that captures the full guild member roster from the Members screen after each daily event stats fetch. The game is already open at that point, so no extra launch is needed. Results are written to a new `guildRoster` PocketBase collection and a daily CSV snapshot. The roster is synced (not just appended) — departed members are deleted using a fuzzy-matched diff so that the collection always reflects the live roster.
+An additional routine that captures the full guild member roster from the Members screen after each daily event stats fetch. The game is already open at that point, so no extra launch is needed. Results are written to a new `guildRoster` PocketBase collection and a daily CSV snapshot. The roster is synced using a fuzzy-matched diff — members who appear on screen have their fields updated and `joined` set to `true`; members no longer seen have `joined` set to `false`. Records are never deleted. Two fields (`main_queue_influence` and `main_queue_faction`) are manually managed and never touched by the bot.
 
 ## Module Structure
 
@@ -18,7 +18,7 @@ src/
   writers/
     csv.js           — existing, unchanged
     pocketbase.js    — existing, unchanged
-config.js            — five new fields added
+config.js            — new fields added
 index.js             — calls roster.capture() after event stats are written
 ```
 
@@ -35,7 +35,7 @@ Internally it is composed of four private functions:
 | `navigate()` | Click back → guild → members; wait for each screen |
 | `extractMembers(imageBuffer)` | Crop screenshot, call Claude Vision, return parsed entries |
 | `scrollAndCapture()` | Loop: screenshot → extract → deduplicate → scroll; stop when no new names |
-| `syncToPocketBase(records, capturedAt)` | Fetch existing roster, fuzzy diff, upsert matches, insert new, delete departed |
+| `syncToPocketBase(records, capturedAt)` | Fetch existing roster, fuzzy diff, upsert matches, mark departed, insert new |
 
 ## Navigation Flow
 
@@ -87,13 +87,18 @@ The scroll loop accumulates entries in a `Map` keyed by `player_name`. If the sa
 | `influence` | number | `341000000` | Full integer, not abbreviated |
 | `castle_level` | number | `62` | |
 | `last_online` | string | `"22 min ago"` | Raw text from screen |
+| `joined` | boolean | `true` | `true` = currently in guild; `false` = has left |
+| `main_queue_influence` | number | `250000000` | Manually set; **never written by the bot** |
+| `main_queue_faction` | string | `"horde"` | `horde`, `league`, or `nature`; **never written by the bot** |
 | `captured_at` | datetime | auto | Set by PocketBase on create/update |
+
+`main_queue_influence` and `main_queue_faction` default to `null` on insert and are never included in any update payload sent by the bot. They exist solely for manual configuration by the guild leader.
 
 The collection must have the view rule set to empty string (public read) so the stats UI can query it in future.
 
 ### CSV
 
-Written to `output/roster-<YYYY-MM-DD>-<timestamp>.csv` with the same six fields plus `captured_at` supplied from the run timestamp. One file per daily run, never mutated after write.
+Written to `output/roster-<YYYY-MM-DD>-<timestamp>.csv` with the bot-managed fields only (`player_name`, `rank`, `influence`, `castle_level`, `last_online`, `joined`, `captured_at`). The manually-managed fields are omitted from CSV since they are not sourced from the game. One file per daily run, never mutated after write.
 
 ## Roster Sync Algorithm
 
@@ -104,6 +109,8 @@ After the scroll loop completes, `syncToPocketBase(capturedRecords, capturedAt)`
 ```js
 const existing = await pb.collection('guildRoster').getFullList();
 ```
+
+This includes all records regardless of `joined` status — a returning member who previously left should be re-matched and their `joined` flag flipped back to `true`.
 
 ### Step 2 — Score all pairs
 
@@ -127,23 +134,26 @@ This ensures each captured name matches at most one existing record and vice ver
 
 Before accepting a match, check the **score gap**: the difference between the best-match score and the second-best match score for that captured name. If the gap is below `config.rosterAmbiguityGap` (default `0.05`), the match is flagged as ambiguous.
 
-Ambiguous matches are **not merged and not deleted** — the existing record is left untouched and the captured entry is logged as ambiguous. This is intentionally conservative: a false-new is recoverable; a false-merge silently corrupts data.
+Ambiguous matches are **not merged and not marked departed** — the existing record is left untouched and the captured entry is logged as ambiguous. This is intentionally conservative: a false-new is recoverable; a false-merge silently corrupts data.
 
 ### Step 5 — Apply changes
 
+The update payload sent to PocketBase for matched and new records **never includes `main_queue_influence` or `main_queue_faction`** — those fields are omitted entirely so PocketBase retains whatever value was set manually.
+
 | Case | Action |
 |---|---|
-| Matched, score ≥ threshold, unambiguous | Update existing record with fresh fields |
-| No match found (score below threshold) | Insert as new record |
-| Existing record not matched by any captured name | Delete from PocketBase |
-| Ambiguous match | Log warning; leave existing record; skip insert |
+| Matched, score ≥ threshold, unambiguous | Update `rank`, `influence`, `castle_level`, `last_online`, set `joined = true` |
+| Returning member (was `joined = false`, now matched) | Same update as above — `joined` flips back to `true` |
+| No match found (score below threshold) | Insert new record: all bot fields set, `joined = true`, `main_queue_influence = null`, `main_queue_faction = null` |
+| Existing record not matched by any captured name | Update only `joined = false`; all other fields left as-is |
+| Ambiguous match | Log warning; leave existing record entirely unchanged; skip insert |
 
 Match threshold: `config.rosterMatchThreshold` (default `0.85`).
 
 ### Step 6 — Log summary
 
 ```
-[roster] 91 matched, 2 new, 1 deleted, 1 ambiguous (review log)
+[roster] 91 matched (3 rejoined), 2 new, 1 departed, 1 ambiguous (review log)
 ```
 
 ## Config Additions
@@ -194,7 +204,7 @@ Roster failure is best-effort: if it throws, the event stats (already written) a
 |---|---|
 | Navigation click fails | `roster.capture()` throws; caught in `run()` as non-fatal |
 | Vision parse fails after retries | Returns empty array for that scroll page; captured count will be low; sync proceeds with partial data |
-| Captured count < 50% of existing | Log a warning before sync; proceed anyway (human should verify) |
+| Captured count < 50% of existing `joined` members | Log a warning before sync; proceed anyway (human should verify) |
 | PocketBase unavailable | Sync throws; CSV still written; error logged |
 
 ## Testing
@@ -203,7 +213,7 @@ Unit-testable functions in `src/roster.js`:
 
 - `levenshteinDistance(a, b)` — standard string edit distance
 - `similarity(a, b)` — normalized score wrapper
-- `greedyMatch(captured, existing, threshold, ambiguityGap)` — returns `{ matched, newPlayers, toDelete, ambiguous }` given two arrays of names and their precomputed scores
+- `greedyMatch(captured, existing, threshold, ambiguityGap)` — returns `{ matched, newPlayers, departed, ambiguous }` given two arrays of names and their precomputed scores
 - `parseInfluence(str)` — converts `"83.5M"` → `83500000`
 
 The sync logic (`syncToPocketBase`) and navigation (`navigate`, `scrollAndCapture`) are not unit tested — they require live PocketBase and a running game respectively.
