@@ -6,7 +6,9 @@
 
 ## Overview
 
-An additional routine that captures the full guild member roster from the Members screen after each daily event stats fetch. The game is already open at that point, so no extra launch is needed. Results are written to a new `guildRoster` PocketBase collection and a daily CSV snapshot. The roster is synced using a fuzzy-matched diff — members who appear on screen have their fields updated and `joined` set to `true`; members no longer seen have `joined` set to `false`. Records are never deleted. Two fields (`main_queue_influence` and `main_queue_faction`) are manually managed and never touched by the bot.
+An additional routine that captures the full guild member roster from the Members screen **before** the daily event stats fetch. The game is already open at that point, so no extra launch is needed. Results are written to a new `guildRoster` PocketBase collection and a daily CSV snapshot. The roster is synced using a fuzzy-matched diff — members who appear on screen have their fields updated and `joined` set to `true`; members no longer seen have `joined` set to `false`. Records are never deleted. Two fields (`main_queue_influence` and `main_queue_faction`) are manually managed and never touched by the bot.
+
+The daily schedule is shifted to **02:45 UTC** — 15 minutes before the event reset — so both roster and event stats are captured before the weekly scores clear.
 
 ## Module Structure
 
@@ -39,14 +41,14 @@ Internally it is composed of four private functions:
 
 ## Navigation Flow
 
-Runs after event stats are written, while the game is still open.
+Runs immediately after the game loads (main map visible), before event stats are fetched.
 
-1. **Click back button** — closes the rankings panel, returns to main map (`rosterBackButtonX/Y`)
-2. **Click guild button** — opens the guild panel (`guildButtonX/Y`)
-3. **Click members button** — opens the Members screen (`membersPanelButtonX/Y`)
-4. **Scroll and capture loop** — no pre-load needed; the members list does not use the same scroll buffer as the rankings list
-5. **Stop** — when a full scroll pass yields no player names not already seen
-6. **Sync to PocketBase + write CSV**
+1. **Click guild button** — opens the guild panel from the main map (`guildButtonX/Y`)
+2. **Click members button** — opens the Members screen (`membersPanelButtonX/Y`)
+3. **Scroll and capture loop** — no pre-load needed; the members list does not use the same scroll buffer as the rankings list
+4. **Stop** — when a full scroll pass yields no player names not already seen
+5. **Sync to PocketBase + write CSV**
+6. **Click guild close button** — closes the guild panel and returns to the main map (`guildCloseButtonX/Y`), so `navigator.navigate()` can start fresh
 
 Each click uses the same `clickAt()` helper as the existing navigator. A configurable `delayMs` pause follows each click to allow the screen to load.
 
@@ -160,12 +162,12 @@ Match threshold: `config.rosterMatchThreshold` (default `0.85`).
 
 ```js
 // Navigation coords — UPDATE to match your screen
-rosterBackButtonX: 538,      // ← back arrow at bottom-left of rankings screen
-rosterBackButtonY: 787,
 guildButtonX: 0,             // guild icon on main map — UPDATE
 guildButtonY: 0,
 membersPanelButtonX: 0,      // members tab inside guild panel — UPDATE
 membersPanelButtonY: 0,
+guildCloseButtonX: 0,        // close/back button to dismiss guild panel — UPDATE
+guildCloseButtonY: 0,
 
 // Crop region for the members panel screenshot — UPDATE
 membersCropBounds: { left: 500, top: 60, width: 460, height: 720 },
@@ -183,20 +185,33 @@ pb: {
 ## Integration with `run()`
 
 ```js
-// After event stats written, game still open:
-try {
-  const { records, capturedAt } = await roster.capture();
-  await csvWriter.writeRoster(records, capturedAt);
-  console.log(`[run] Roster: ${records.length} members captured`);
-} catch (err) {
-  console.error('[run] Roster capture failed:', err.message);
-  // non-fatal — launcher.close() still runs
-} finally {
-  launcher.close();
+async function run() {
+  await launcher.launch();
+  try {
+    // 1. Roster first — game on main map, guild panel not yet open
+    try {
+      const { records, capturedAt } = await roster.capture();
+      await csvWriter.writeRoster(records, capturedAt);
+      console.log(`[run] Roster: ${records.length} members captured`);
+    } catch (err) {
+      console.error('[run] Roster capture failed:', err.message);
+      // non-fatal — continue to event stats
+    }
+
+    // 2. Event stats — roster.capture() left the game on main map
+    const { eventType, pages } = await navigator.navigate();
+    // ... rest of existing flow unchanged ...
+  } finally {
+    launcher.close();
+  }
 }
 ```
 
-Roster failure is best-effort: if it throws, the event stats (already written) are not affected and the game still closes cleanly.
+Roster failure is non-fatal: if it throws the game is still on the main map (or close to it) and event stats capture proceeds. If roster navigation leaves the game in an unexpected state, `navigator.navigate()` may also fail, but that is caught separately and the game still closes cleanly.
+
+## Scheduler
+
+`src/scheduler.js` cron expression changes from `50 2 * * *` to `45 2 * * *` (02:45 UTC daily). This fires 15 minutes before the event reset, leaving enough time for both roster and event stats captures to complete before scores clear.
 
 ## Error Handling
 
