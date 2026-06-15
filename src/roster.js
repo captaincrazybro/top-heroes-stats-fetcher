@@ -137,6 +137,50 @@ Rules:
   return [];
 }
 
+// ── Navigation helpers ────────────────────────────────────────────────────────
+
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+async function clickAt({ x, y }, delayMs = 800) {
+  await mouse.setPosition({ x, y });
+  await mouse.leftClick();
+  await sleep(delayMs);
+}
+
+async function performMembersScroll() {
+  mouse.config.mouseSpeed = config.scrollDragSpeedPps ?? 500;
+  await mouse.setPosition({ x: config.membersScrollDragX, y: config.membersScrollDragFromY });
+  await mouse.pressButton(Button.LEFT);
+  await sleep(200);
+  await mouse.move(straightTo({ x: config.membersScrollDragX, y: config.membersScrollDragToY }));
+  await sleep(config.scrollDragLingerMs ?? 300);
+  await mouse.releaseButton(Button.LEFT);
+}
+
+async function scrollAndCapture() {
+  const seen = new Map(); // player_name → entry
+
+  while (true) {
+    const prevSize = seen.size;
+    const img = await capturer.capture();
+    const entries = await extractMembers(img);
+
+    for (const entry of entries) {
+      if (!seen.has(entry.player_name)) {
+        seen.set(entry.player_name, entry);
+      }
+    }
+
+    if (seen.size === prevSize) break; // no new names this pass → list exhausted
+
+    await performMembersScroll();
+  }
+
+  return [...seen.values()];
+}
+
 // ── Placeholders (filled in later tasks) ────────────────────────────────────
 
 async function capture() {
