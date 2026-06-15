@@ -189,6 +189,83 @@ async function navigate() {
   await clickAt({ x: config.membersPanelButtonX, y: config.membersPanelButtonY });
 }
 
+// ── PocketBase client ─────────────────────────────────────────────────────────
+
+let _rosterPb = null;
+
+async function getRosterClient() {
+  if (_rosterPb) return _rosterPb;
+  const pb = new PocketBase(config.pb.url);
+  try {
+    await pb.collection('_superusers').authWithPassword(config.pb.email, config.pb.password);
+  } catch (err) {
+    throw new Error(`[roster] PocketBase auth failed: ${err.message}`);
+  }
+  _rosterPb = pb;
+  return _rosterPb;
+}
+
+// ── Sync ──────────────────────────────────────────────────────────────────────
+
+async function syncToPocketBase(capturedRecords, capturedAt) {
+  const pb = await getRosterClient();
+  const col = config.pb.rosterCollection;
+
+  const existing = await pb.collection(col).getFullList({ sort: 'player_name' });
+
+  const joinedCount = existing.filter(r => r.joined).length;
+  if (joinedCount > 0 && capturedRecords.length < joinedCount * 0.5) {
+    console.warn(`[roster] Only ${capturedRecords.length} captured vs ${joinedCount} active members — data may be incomplete`);
+  }
+
+  const capturedNames = capturedRecords.map(r => r.player_name);
+  const existingNames = existing.map(r => r.player_name);
+
+  const { matched, newPlayers, departed } = greedyMatch(
+    capturedNames,
+    existingNames,
+    config.rosterMatchThreshold
+  );
+
+  let rejoined = 0;
+
+  for (const { capturedIndex, existingIndex } of matched) {
+    const rec = capturedRecords[capturedIndex];
+    const ex  = existing[existingIndex];
+    await pb.collection(col).update(ex.id, {
+      player_name:  rec.player_name,
+      rank:         rec.rank,
+      influence:    rec.influence,
+      castle_level: rec.castle_level,
+      last_online:  rec.last_online,
+      joined:       true,
+    });
+    if (!ex.joined) rejoined++;
+  }
+
+  for (const ci of newPlayers) {
+    const rec = capturedRecords[ci];
+    await pb.collection(col).create({
+      player_name:          rec.player_name,
+      rank:                 rec.rank,
+      influence:            rec.influence,
+      castle_level:         rec.castle_level,
+      last_online:          rec.last_online,
+      joined:               true,
+      main_queue_influence: null,
+      main_queue_faction:   null,
+    });
+  }
+
+  for (const ei of departed) {
+    const ex = existing[ei];
+    if (!ex.joined) continue;
+    await pb.collection(col).update(ex.id, { joined: false });
+  }
+
+  console.log(`[roster] ${matched.length} matched (${rejoined} rejoined), ${newPlayers.length} new, ${departed.length} departed`);
+}
+
 // ── Placeholders (filled in later tasks) ────────────────────────────────────
 
 async function capture() {
