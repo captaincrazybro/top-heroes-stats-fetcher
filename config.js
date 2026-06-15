@@ -73,12 +73,32 @@ module.exports = {
   },
   kvkMaxRank: 200,              // entries above this rank are dropped for KvK
 
+  // Guild roster navigation — pixel coords, UPDATE to match your screen
+  guildButtonX: 0,
+  guildButtonY: 0,
+  membersPanelButtonX: 0,
+  membersPanelButtonY: 0,
+  guildCloseButtonX: 0,
+  guildCloseButtonY: 0,
+
+  // Members panel scroll gesture — separate from rankingsList scroll which is per-event-type
+  membersScrollDragX: 764,      // horizontal center of the members list — UPDATE
+  membersScrollDragFromY: 582,  // Y where drag starts (near list bottom) — UPDATE
+  membersScrollDragToY: 225,    // Y where drag ends (near list top) — UPDATE
+
+  // Crop region for the members panel screenshot — UPDATE to match your screen
+  membersCropBounds: { left: 500, top: 60, width: 460, height: 720 },
+
+  // Fuzzy sync tuning
+  rosterMatchThreshold: 0.85,
+
   anthropicModel: 'claude-sonnet-4-6',
 
   pb: {
     url:                    process.env.POCKETBASE_URL,
     email:                  process.env.POCKETBASE_EMAIL,
     password:               process.env.POCKETBASE_PASSWORD,
-    collection: 'topHeroesEventRecords',
+    collection:             'topHeroesEventRecords',
+    rosterCollection:       'guildRoster',
   },
 };
