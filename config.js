@@ -8,6 +8,11 @@ module.exports = {
   launchTimeoutMs: 120_000,
   loadTimeoutMs: 180_000,
 
+  // Click target used to dismiss startup popups — should be a spot outside any popup dialog.
+  // Set to null to disable. UPDATE to a safe empty area of the main map screen.
+  popupDismissX: 0,
+  popupDismissY: 863,
+
   // Events icon — hardcoded pixel coords.
   eventsIconX: 1492,
   eventsIconY: 149,
@@ -45,7 +50,7 @@ module.exports = {
   },        
   // placeholder — Y where drag starts (near list bottom)      
   scrollDragFromY: {
-    GR: 592,
+    GR: 594,
     GAR: 582,
     KvK: 582
   },          
@@ -57,7 +62,7 @@ module.exports = {
   },            
   scrollDragSpeedPps: 1000,       // drag speed in pixels/sec — too fast and the game won't register the scroll
   scrollDragLingerMs: 600,       // ms to hold at the end of the drag before releasing — prevents over-scroll
-  fastScrollDragSpeedPps: 1500, // speed for pre-load scrolls (pps) — faster than capture scrolls
+  fastScrollDragSpeedPps: 1250, // speed for pre-load scrolls (pps) — faster than capture scrolls
   fastScrollDragLingerMs: 50,   // ms to hold at end of each fast drag
   fastScrollReboundWaitMs: 200, // ms to wait between fast drags
   // number of fast drags down for each event (then same count back up)
@@ -66,17 +71,22 @@ module.exports = {
     GR: 50,
     KvK: 50
   },
-  kvkMaxRank: 200,              // entries above this rank are dropped for KvK
+  kvkMaxRank: 300,              // entries above this rank are dropped for KvK
 
-  // Guild roster navigation — pixel coords, UPDATE to match your screen
-  guildButtonX: 1487,
-  guildButtonY: 542,
-  membersPanelButtonX: 875,
-  membersPanelButtonY: 770,
+  // Guild roster navigation — click sequence from the main map to the members panel.
+  // Replace placeholder {x, y} values with your actual screen coordinates (UPDATE).
+  membersNavigationClicks: [
+    { x: 38, y: 70 },
+    { x: 852, y: 828 },
+    { x: 886, y: 154 },
+    { x: 654, y: 708 },
+    { x: 700, y: 592 },
+  ],
+
   guildCloseButtonX: 561,
   guildCloseButtonY: 828,
 
-  // 5-click setup sequence run before member capture to ensure all members are visible.
+  // 5-click setup sequence run before membeWr capture to ensure all members are visible.
   // Clicks 1 and 5 share the same coords; clicks 2–4 are distinct. UPDATE each entry.
   membersSetupClicks: [
     { x: 968, y: 429 },
@@ -91,13 +101,19 @@ module.exports = {
   membersScrollDragFromY: 780,  // Y where drag starts (near list bottom) — UPDATE
   membersScrollDragToY: 420,    // Y where drag ends (near list top) — UPDATE
 
-  // Crop region for the members panel screenshot — UPDATE to match your screen
-  membersCropBounds: { left: 655, top: 82, width: 608, height: 906 },
+  // Crop covering only the R5 guild master banner at the top of the members screen.
+  // Captured once before the scroll loop — UPDATE height to fit just the banner card.
+  guildMasterCropBounds: { left: 738, top: 89, width: 443, height: 225 },
+
+  // Crop for the scrollable member grid only — must start BELOW the guild roles row.
+  // UPDATE top so it aligns with the first rank section header (R4, R3, etc.).
+  membersCropBounds: { left: 673, top: 510, width: 570, height: 480 },
 
   // Fuzzy sync tuning
   rosterMatchThreshold: 0.85,
 
   anthropicModel: 'claude-sonnet-4-6',
+  visionModel: 'gpt-5.1',
 
   pb: {
     url:                    process.env.POCKETBASE_URL,

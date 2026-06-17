@@ -19,26 +19,26 @@ async function insertRecord(pb, record) {
   await pb.collection(config.pb.collection).create(record);
 }
 
-async function upsertGrRecord(pb, record) {
-  const filter = `event_type = "GR" && player_name = "${record.player_name}" && event_start_date = "${record.event_start_date}"`;
-  const existing = await pb.collection(config.pb.collection).getList(1, 1, { filter });
-
-  if (existing.totalItems > 0) {
-    await pb.collection(config.pb.collection).update(existing.items[0].id, record);
-  } else {
-    await pb.collection(config.pb.collection).create(record);
+async function deleteGrRecords(pb, eventStartDate) {
+  const filter = `event_type = "GR" && event_start_date = "${eventStartDate}"`;
+  const existing = await pb.collection(config.pb.collection).getFullList({ filter });
+  for (const record of existing) {
+    await pb.collection(config.pb.collection).delete(record.id);
+  }
+  if (existing.length > 0) {
+    console.log(`[pocketbase] Deleted ${existing.length} previous GR records for ${eventStartDate}`);
   }
 }
 
 async function write(records, eventType) {
   const pb = await getClient();
 
+  if (eventType === 'GR' && records.length > 0) {
+    await deleteGrRecords(pb, records[0].event_start_date);
+  }
+
   for (const record of records) {
-    if (eventType === 'GR') {
-      await upsertGrRecord(pb, record);
-    } else {
-      await insertRecord(pb, record);
-    }
+    await insertRecord(pb, record);
   }
 
   console.log(`[pocketbase] ${records.length} records written (${eventType})`);

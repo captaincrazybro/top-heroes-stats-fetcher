@@ -9,6 +9,8 @@
   "scripts": {
     "start": "node index.js",
     "run-now": "node index.js --run-now",
+    "run-roster": "node run-roster.js",
+    "run-events": "node run-events.js",
     "install-service": "node install-service.js",
     "uninstall-service": "node uninstall-service.js",
     "test": "jest",
@@ -25,6 +27,7 @@
     "dotenv": "^17.4.2",
     "node-cron": "^4.2.1",
     "node-windows": "^1.0.0-beta.8",
+    "openai": "^6.42.0",
     "pocketbase": "^0.27.0",
     "screenshot-desktop": "^1.15.4",
     "sharp": "^0.34.5"

@@ -1,5 +1,5 @@
 const { spawn, execSync } = require('child_process');
-const { keyboard, Key } = require('@nut-tree-fork/nut-js');
+const { keyboard, Key, mouse } = require('@nut-tree-fork/nut-js');
 const config = require('../config');
 const capturer = require('./capturer');
 const extractor = require('./extractor');
@@ -38,23 +38,18 @@ async function waitForWindow(intervalMs = 2000) {
   throw new Error(`timed out waiting for window: ${config.windowTitle}`);
 }
 
-async function dismissPopupIfPresent() {
-  const img = await capturer.capture();
-  try {
-    const coords = await extractor.locateButton(img, 'red circular X button at the bottom center or top left of a popup or notification dialog');
-    await clickAt(coords, 1000);
-    console.log('[navigator] Dismissed startup popup');
-  } catch {
-    // No popup present — continue normally
-  }
-}
-
 async function waitForReady(intervalMs = 5000) {
   const deadline = Date.now() + loadTimeoutMs;
   while (Date.now() < deadline) {
     const img = await capturer.capture();
     const state = await extractor.detectGameState(img);
     if (state.isMainMap) return;
+    // Not on main map — a popup may be blocking. Click outside it to dismiss.
+    if (config.popupDismissX != null && config.popupDismissY != null) {
+      await mouse.setPosition({ x: config.popupDismissX, y: config.popupDismissY });
+      await mouse.leftClick();
+      await sleep(500);
+    }
     const remaining = deadline - Date.now();
     if (remaining <= 0) break;
     await sleep(Math.min(intervalMs, remaining));
@@ -103,9 +98,6 @@ async function launch() {
   
   console.log('[launcher] Waiting for game to load...');
   await waitForReady();
-
-  // Dismiss any startup popup (e.g. "Rival Combat Day is coming")
-  await dismissPopupIfPresent();
 
   console.log('[launcher] Game ready.');
 }

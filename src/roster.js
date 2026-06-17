@@ -1,12 +1,12 @@
 'use strict';
 const { mouse, Button, straightTo } = require('@nut-tree-fork/nut-js');
-const Anthropic = require('@anthropic-ai/sdk');
+const { OpenAI } = require('openai');
 const sharp = require('sharp');
 const PocketBase = require('pocketbase').default;
 const config = require('../config');
 const capturer = require('./capturer');
 
-const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
 // ── Pure utilities ───────────────────────────────────────────────────────────
 
@@ -31,6 +31,14 @@ function similarity(a, b) {
   if (al.length === 0 || bl.length === 0) return 0;
   const dist = levenshteinDistance(al, bl);
   return 1 - dist / Math.max(al.length, bl.length);
+}
+
+function stripEmojis(str) {
+  return str.replace(/\p{Extended_Pictographic}/gu, '').trim();
+}
+
+function meaningful(v) {
+  return v !== null && v !== undefined && v !== 0 && v !== '';
 }
 
 function parseInfluence(str) {
@@ -76,23 +84,22 @@ function greedyMatch(capturedNames, existingNames, threshold) {
 
 // ── Vision helpers ────────────────────────────────────────────────────────────
 
-function toBase64(buffer) {
-  return buffer.toString('base64');
-}
-
 async function callVision(buffer, prompt) {
-  const response = await client.messages.create({
-    model: config.anthropicModel,
-    max_tokens: 512,
+  const response = await client.chat.completions.create({
+    model: config.visionModel,
+    max_completion_tokens: 1500,
     messages: [{
       role: 'user',
       content: [
-        { type: 'image', source: { type: 'base64', media_type: 'image/png', data: toBase64(buffer) } },
+        {
+          type: 'image_url',
+          image_url: { url: `data:image/png;base64,${buffer.toString('base64')}` },
+        },
         { type: 'text', text: prompt },
       ],
     }],
   });
-  return response.content[0]?.text ?? '';
+  return response.choices[0]?.message?.content ?? '';
 }
 
 function tryParseJSON(text) {
@@ -100,6 +107,36 @@ function tryParseJSON(text) {
   try { return JSON.parse(stripped); } catch {}
   const match = text.match(/\{[\s\S]*\}/);
   if (match) try { return JSON.parse(match[0]); } catch {}
+  return null;
+}
+
+async function extractGuildMaster(imageBuffer) {
+  const bounds = config.guildMasterCropBounds;
+  if (!bounds) return null;
+  try {
+    imageBuffer = await sharp(imageBuffer).extract(bounds).png().toBuffer();
+  } catch (err) {
+    console.warn('[roster] Guild master crop failed:', err.message);
+    return null;
+  }
+
+  const prompt = `Look at this Top Heroes guild master banner.
+Extract the guild master's details. Return ONLY valid JSON:
+{"player_name":"string","level":"123","influence":341000000,"castle_level":62,"last_online":"Online"}
+
+Rules:
+- player_name: copy the text exactly, including special characters, but SKIP any emojis
+- level: small number shown on the profile picture
+- influence: converted to a full integer (341M → 341000000, 83.5M → 83500000)
+- castle_level: numeric level next to the castle icon
+- last_online: exact text shown — "Online", "22 min ago", "5 days ago", etc.`;
+
+  const text = await callVision(imageBuffer, prompt);
+  const parsed = tryParseJSON(text);
+  if (parsed?.player_name) {
+    return { ...parsed, rank: 'R5', player_name: stripEmojis(parsed.player_name), influence: parseInfluence(parsed.influence) };
+  }
+  console.log('[roster] extractGuildMaster parse failed:', text);
   return null;
 }
 
@@ -113,35 +150,53 @@ async function extractMembers(imageBuffer, inheritedRank = null) {
     }
   }
 
-  const rankHint = inheritedRank
-    ? `The most recently seen rank section (from a prior screen) is ${inheritedRank} — use it for any member whose section header has scrolled off the top and is not visible on this screen.`
-    : 'If no rank section header is visible above a member, set rank to null.';
+  const inheritedNote = inheritedRank
+    ? `Members at the top of the screen above any visible header belong to the inherited rank "${inheritedRank}" from the previous screen — put them in a section with rank "inherited".`
+    : 'If no section headers are visible, put all members in a section with rank "inherited".';
 
-  const prompt = `Look at this Top Heroes guild Members screen.
-Extract ALL visible member entries from the scrollable member grid. Return ONLY valid JSON:
-{"currentRank":"R3","members":[{"player_name":"string","rank":"R4","level":"123","influence":341000000,"castle_level":62,"last_online":"22 min ago"}]}
+  const prompt = `Look at this Top Heroes guild member grid.
+Group all visible members by their rank section. Return ONLY valid JSON:
+{"sections":[{"rank":"inherited","members":[...]},{"rank":"R2","members":[...]}]}
 
-Rules:
-- There is a FIXED guild master banner pinned at the very top showing the R5 leader's name and stats. Always include this person as a member entry with rank "R5". They do NOT appear again in the scrollable grid.
-- The scrollable grid below has rank section headers like "R4 2/3", "R3 19/58", "R2 0/10" etc. These are the ONLY valid section headers for rank assignment of grid members.
-- rank: for the fixed R5 banner person set rank to "R5". For all other members, determine rank from the nearest section header within the scrollable grid above them. ${rankHint}
-- currentRank: the last rank section header visible in the scrollable grid (scanning top to bottom). Ignore the fixed R5 banner entirely — only "R4 X/Y", "R3 X/Y" style headers count.
-- level: small number shown on the player's profile picture near their name
-- influence: converted to a full integer (341M → 341000000, 83.5M → 83500000)
-- castle_level: numeric level next to the castle icon
-- last_online: exact text shown — "Online", "22 min ago", "5 days ago", etc.
-- The grid has TWO columns — capture entries from BOTH the left and right columns
-- SKIP the guild role row (Warlord, Recruiter, Muse, Butler slots) — those players appear again in the main grid
-- Do NOT include any entry without a visible player name`;
+Instructions:
+1. Find rank section headers on screen — divider rows that start with R4, R3, R2, or R1 followed by a count (e.g. "R4 2/3", "R3 19/58", "R2 0/10", "R1 5/20"). These are the ONLY possible rank values.
+2. Members appearing BEFORE the first visible header → section rank "inherited".
+3. Members appearing AFTER a visible header → section with that header's rank (e.g. "R2").
+4. If NO headers are visible → one section with rank "inherited" containing all members.
+5. Only list a header if you can clearly read it. If unsure, use "inherited".
+${inheritedNote}
+
+Each member object:
+- player_name: exact text, skip emojis, include special characters
+- level: small number on the profile picture
+- influence: full integer (341M → 341000000, 83.5M → 83500000)
+- castle_level: number next to the castle icon
+- last_online: exact text ("Online", "22 min ago", "5 days ago", etc.)
+Include members from BOTH the left and right columns. Skip any entry without a visible player name.`;
 
   for (let attempt = 0; attempt < 2; attempt++) {
     const text = await callVision(imageBuffer, prompt);
     const parsed = tryParseJSON(text);
-    if (parsed?.members && Array.isArray(parsed.members)) {
-      return {
-        members: parsed.members.map(m => ({ ...m, influence: parseInfluence(m.influence) })),
-        currentRank: parsed.currentRank ?? null,
-      };
+    if (parsed?.sections && Array.isArray(parsed.sections)) {
+      let lowestExplicitRank = null;
+      const members = [];
+      for (const section of parsed.sections) {
+        const rank = (section.rank === 'inherited') ? inheritedRank : (section.rank ?? inheritedRank);
+        for (const m of section.members ?? []) {
+          members.push({
+            ...m,
+            rank,
+            player_name: stripEmojis(m.player_name ?? ''),
+            influence: parseInfluence(m.influence),
+          });
+        }
+        if (section.rank && section.rank !== 'inherited') {
+          const n = parseInt(String(section.rank).replace(/\D/g, ''), 10);
+          const best = lowestExplicitRank ? parseInt(lowestExplicitRank.replace(/\D/g, ''), 10) : Infinity;
+          if (n < best) lowestExplicitRank = String(section.rank);
+        }
+      }
+      return { members, currentRank: lowestExplicitRank };
     }
     console.log(`[roster] extractMembers parse failed (attempt ${attempt + 1}):`, text);
   }
@@ -154,9 +209,11 @@ function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-async function clickAt({ x, y }, delayMs = 800) {
-  await mouse.setPosition({ x: 0, y: 0});
-  await sleep(100);
+async function clickAt({ x, y }, delayMs = 800, isDuplicate = false) {
+  if (isDuplicate) {
+    await mouse.setPosition({ x: 0, y: 0});
+    await sleep(100);
+  }
   await mouse.setPosition({ x, y });
   await mouse.leftClick();
   await sleep(delayMs);
@@ -185,14 +242,37 @@ async function scrollAndCapture() {
 
   for (let pass = 0; pass < maxPasses; pass++) {
     const prevSize = seen.size;
+    const inheritedAtCallTime = currentRank;
+    const inheritedNum = inheritedAtCallTime ? parseInt(inheritedAtCallTime.replace(/\D/g, ''), 10) : Infinity;
     const img = await capturer.capture();
     const { members: entries, currentRank: nextRank } = await extractMembers(img, currentRank);
-    console.log(entries);
+    console.log(`[roster] pass ${pass + 1}: inheritedRank=${currentRank} visibleRank=${nextRank} entries=${entries.length}`);
+    console.log(entries)
 
-    if (nextRank) currentRank = nextRank;
+    // Only accept a rank update if it moves lower — ranks only decrease as we scroll.
+    if (nextRank) {
+      const nextNum = parseInt(nextRank.replace(/\D/g, ''), 10);
+      const currentNum = currentRank ? parseInt(currentRank.replace(/\D/g, ''), 10) : Infinity;
+      if (nextNum <= currentNum) currentRank = nextRank;
+    }
+
+    // Fallback: infer from members whose rank is lower than what we've tracked.
+    for (const entry of entries) {
+      if (entry.rank) {
+        const entryNum = parseInt(entry.rank.replace(/\D/g, ''), 10);
+        const currentNum = currentRank ? parseInt(currentRank.replace(/\D/g, ''), 10) : Infinity;
+        if (entryNum < currentNum) currentRank = entry.rank;
+      }
+    }
 
     for (const entry of entries) {
       if (!seen.has(entry.player_name)) {
+        // Hallucination guard: if a member's rank is higher than what we inherited
+        // going into this pass, we've already scrolled past that section — correct it.
+        if (entry.rank && inheritedAtCallTime) {
+          const entryNum = parseInt(entry.rank.replace(/\D/g, ''), 10);
+          if (entryNum > inheritedNum) entry.rank = inheritedAtCallTime;
+        }
         seen.set(entry.player_name, entry);
       }
     }
@@ -208,8 +288,9 @@ async function scrollAndCapture() {
 // ── Navigation ────────────────────────────────────────────────────────────────
 
 async function navigate() {
-  await clickAt({ x: config.guildButtonX,       y: config.guildButtonY });
-  await clickAt({ x: config.membersPanelButtonX, y: config.membersPanelButtonY });
+  for (const coords of config.membersNavigationClicks) {
+    await clickAt(coords);
+  }
 }
 
 // ── PocketBase client ─────────────────────────────────────────────────────────
@@ -255,15 +336,14 @@ async function syncToPocketBase(capturedRecords, capturedAt) {
   for (const { capturedIndex, existingIndex } of matched) {
     const rec = capturedRecords[capturedIndex];
     const ex  = existing[existingIndex];
-    await pb.collection(col).update(ex.id, {
-      player_name:  rec.player_name,
-      rank:         rec.rank,
-      level:        rec.level,
-      influence:    rec.influence,
-      castle_level: rec.castle_level,
-      last_online:  rec.last_online,
-      joined:       true,
-    });
+    const update = { joined: true };
+    if (meaningful(rec.player_name))  update.player_name  = rec.player_name;
+    if (meaningful(rec.rank))         update.rank         = rec.rank;
+    if (meaningful(rec.level))        update.level        = rec.level;
+    if (meaningful(rec.influence))    update.influence    = rec.influence;
+    if (meaningful(rec.castle_level)) update.castle_level = rec.castle_level;
+    if (meaningful(rec.last_online))  update.last_online  = rec.last_online;
+    await pb.collection(col).update(ex.id, update);
     if (!ex.joined) rejoined++;
   }
 
@@ -298,11 +378,19 @@ async function capture() {
 
   await navigate();
   await performMembersSetup();
-  const records = await scrollAndCapture();
+
+  const firstImg = await capturer.capture();
+  const guildMaster = await extractGuildMaster(firstImg);
+  if (guildMaster) console.log(`[roster] Guild master: ${guildMaster.player_name}`);
+
+  const scrolled = await scrollAndCapture();
+  const records = guildMaster ? [guildMaster, ...scrolled] : scrolled;
+
   await syncToPocketBase(records, capturedAt);
-  // Two back presses: members screen → guild panel → main map
-  await clickAt({ x: config.guildCloseButtonX, y: config.guildCloseButtonY });
-  await clickAt({ x: config.guildCloseButtonX, y: config.guildCloseButtonY });
+  // Four back presses: members screen → main map (matches 5-click nav depth)
+  for (let i = 0; i < 4; i++) {
+    await clickAt({ x: config.guildCloseButtonX, y: config.guildCloseButtonY }, 800, true);
+  }
 
   const enriched = records.map(r => ({ ...r, joined: true, captured_at: capturedAt }));
   console.log(`[roster] Captured ${enriched.length} members`);
