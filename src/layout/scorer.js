@@ -16,17 +16,21 @@ function parseDaysOffline(lastOnline) {
   if ((m = s.match(/^(\d+)\s*hour/i))) return 0;
   if ((m = s.match(/^(\d+)\s*day/i))) return parseInt(m[1], 10);
   if ((m = s.match(/^(\d+)\s*week/i))) return parseInt(m[1], 10) * 7;
+  console.warn(`[layout] Could not parse last_online: "${lastOnline}" — treating as inactive`);
   return Infinity;
 }
 
 function scorePlayers(players) {
-  return players.map(p => ({
-    player: p,
-    score: computeScore(p),
-    daysOffline: parseDaysOffline(p.last_online),
-    inactive: parseDaysOffline(p.last_online) > 7,
-    hasAoeBuffs: !!p.has_aoe_buffs,
-  }));
+  return players.map(p => {
+    const days = parseDaysOffline(p.last_online);
+    return {
+      player: p,
+      score: computeScore(p),
+      daysOffline: days,
+      inactive: days > 7,
+      hasAoeBuffs: !!p.has_aoe_buffs,
+    };
+  });
 }
 
 module.exports = { computeScore, parseDaysOffline, scorePlayers };

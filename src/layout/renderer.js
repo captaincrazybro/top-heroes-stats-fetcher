@@ -96,8 +96,8 @@ function iconSvg(iconName, cx, cy, iconSize) {
 }
 
 function aoePolygon(col, row, cx, top) {
-  // 9x9 range: extends 4 tiles in each direction from center of 2x2 castle
-  const c0 = col - 4, r0 = row - 4;
+  // 9x9 range: center of 2x2 castle is at (col+1, row+1); Chebyshev ≤4 spans col-3..col+5
+  const c0 = col - 3, r0 = row - 3;
   const c1 = col + 5, r1 = row + 5;
   // Bounding diamond of the 9x9 area
   const top_    = isoToScreen(c0,      r0,      cx, top);
@@ -158,9 +158,16 @@ function renderLegend() {
 }
 
 function renderSVG(placements) {
-  const castles = placements.filter(p => p.type === 'castle');
-  const activeCount = castles.filter(p => !p.inactive).length;
-  let activeRank = 0;
+  // Build a score-sorted rank map so AOE and non-AOE players are ranked by actual strength.
+  // Castle placements have shape { type, col, row, size, player, score, inactive, hasAoeBuffs, … }
+  // where `player` is the raw player object and `inactive` / `score` are scored-player fields.
+  const activePlacements = placements
+    .filter(p => p.type === 'castle' && !p.inactive)
+    .sort((a, b) => b.score - a.score);
+  const activeRankMap = new Map(
+    activePlacements.map((p, i) => [p.player.player_name, i])
+  );
+  const activeCount = activePlacements.length;
 
   const layers = {
     ground: renderGroundTiles(),
@@ -175,8 +182,10 @@ function renderSVG(placements) {
     let color, iconName, iconSize;
 
     if (p.type === 'castle') {
-      const rank = p.inactive ? null : activeRank++;
-      color = castleColor(p, activeCount, rank);
+      const activeRank = !p.inactive
+        ? (activeRankMap.get(p.player?.player_name) ?? 0)
+        : null;
+      color = castleColor(p, activeCount, activeRank);
       iconName = 'castle';
       iconSize = 40;
     } else if (p.type === 'building') {
@@ -196,7 +205,7 @@ function renderSVG(placements) {
     if (iconName) layers.icons += iconSvg(iconName, cx, cy, iconSize) + '\n';
 
     if (p.type === 'castle') {
-      if (p.hasAoeBuffs) layers.aoe += aoePolygon(p.col, p.row, CX, TOP) + '\n';
+      if (p.hasAoeBuffs && !p.inactive) layers.aoe += aoePolygon(p.col, p.row, CX, TOP) + '\n';
       layers.labels += renderLabel(p, cx, cy) + '\n';
     }
   }
