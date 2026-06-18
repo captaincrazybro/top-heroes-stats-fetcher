@@ -11,6 +11,7 @@
     "run-now": "node index.js --run-now",
     "run-roster": "node run-roster.js",
     "run-events": "node run-events.js",
+    "layout": "node generate-layout.js",
     "install-service": "node install-service.js",
     "uninstall-service": "node uninstall-service.js",
     "test": "jest",
