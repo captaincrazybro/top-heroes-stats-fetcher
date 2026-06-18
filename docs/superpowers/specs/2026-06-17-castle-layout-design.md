@@ -61,6 +61,7 @@ Each tile is drawn as a `<polygon>` with 4 vertices:
 |---|---|---|
 | Guild fort | 3×3 | `(9,9)` → `(11,11)` — visual center of the grid |
 | 6 guild buildings | 1×1 each | Tiles directly adjacent to the fort perimeter |
+| 4 barricades | 1×1 each | Tiles directly adjacent to the fort perimeter |
 | Arrow Tower (top) | 2×2 | `(2,2)` → `(3,3)` — just inside outer player ring |
 | Arrow Tower (right) | 2×2 | `(17,2)` → `(18,3)` |
 | Arrow Tower (left) | 2×2 | `(2,17)` → `(3,18)` |
@@ -144,7 +145,7 @@ Implemented in `src/layout/renderer.js`. Produces an SVG string which is rasteri
 | Guild buildings | `#3B82F6` (blue) |
 | Active castles | Gradient — `#DC2626` (strongest/outer) → `#84CC16` (weakest active/inner) |
 | Inactive castles | `#9CA3AF` (muted gray) |
-| AoE zone overlay | `rgba(251, 191, 36, 0.18)` (amber, semi-transparent) |
+| AoE zone overlay | `rgba(0, 210, 210, 0.18)` (aqua, semi-transparent) |
 
 Active castle color is interpolated linearly between the two endpoints based on the player's normalized rank among active players.
 
@@ -152,12 +153,12 @@ Active castle color is interpolated linearly between the two endpoints based on 
 
 | Structure | Icon name |
 |---|---|
-| Guild fort | `castle` |
+| Guild fort | `military-fort` |
 | Arrow towers | `watchtower` |
 | Guild buildings (ranch) | `barn` |
 | Guild buildings (territory decorations) | `tower` |
-| Player castle (active) | `tower-fall` |
-| Player castle (inactive) | `broken-tower` |
+| Barricades | `stakes-fence` |
+| Player castles (active and inactive) | `castle` |
 
 Icons are scaled via `<g transform="translate(cx,cy) scale(s)">` to fit within the structure's isometric footprint. Exact icon paths are sourced from game-icons.net at implementation time and embedded as string constants in `renderer.js`.
 
@@ -174,8 +175,6 @@ Icons are scaled via `<g transform="translate(cx,cy) scale(s)">` to fit within t
 const png = await sharp(Buffer.from(svgString)).png().toBuffer();
 await fs.promises.writeFile(outputPath, png);
 ```
-
-If sharp's SVG rendering fails (e.g., complex path issues), fallback: submit the SVG to OpenAI's `gpt-image-2` model with the prompt "render this SVG exactly as an image" and use the returned PNG.
 
 ---
 
@@ -205,4 +204,4 @@ No new config.js entries required. PocketBase connection reuses existing `config
 - If a player's `last_online` cannot be parsed: log a warning, treat as inactive.
 - If `main_queue_influence` is null/undefined/0: silently fall back to `influence` alone.
 - If more players than available positions: log a warning, extra players are omitted from the layout (lowest-ranked inactive players dropped first).
-- If sharp SVG rasterization fails: attempt `gpt-image-2` fallback; if that also fails, write the raw SVG to `output/guild-layout-YYYY-MM-DD.svg` instead.
+- If sharp SVG rasterization fails: write the raw SVG to `output/guild-layout-YYYY-MM-DD.svg` instead and log an error.
