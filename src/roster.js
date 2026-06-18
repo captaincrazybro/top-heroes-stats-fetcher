@@ -1,12 +1,12 @@
 'use strict';
 const { mouse, Button, straightTo } = require('@nut-tree-fork/nut-js');
-const { OpenAI } = require('openai');
+const Anthropic = require('@anthropic-ai/sdk');
 const sharp = require('sharp');
 const PocketBase = require('pocketbase').default;
 const config = require('../config');
 const capturer = require('./capturer');
 
-const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
 // ── Pure utilities ───────────────────────────────────────────────────────────
 
@@ -85,21 +85,25 @@ function greedyMatch(capturedNames, existingNames, threshold) {
 // ── Vision helpers ────────────────────────────────────────────────────────────
 
 async function callVision(buffer, prompt) {
-  const response = await client.chat.completions.create({
-    model: config.visionModel,
-    max_completion_tokens: 1500,
+  const response = await client.messages.create({
+    model: config.anthropicModel,
+    max_tokens: 1500,
     messages: [{
       role: 'user',
       content: [
         {
-          type: 'image_url',
-          image_url: { url: `data:image/png;base64,${buffer.toString('base64')}` },
+          type: 'image',
+          source: {
+            type: 'base64',
+            media_type: 'image/png',
+            data: buffer.toString('base64'),
+          },
         },
         { type: 'text', text: prompt },
       ],
     }],
   });
-  return response.choices[0]?.message?.content ?? '';
+  return response.content[0]?.text ?? '';
 }
 
 function tryParseJSON(text) {
@@ -386,7 +390,7 @@ async function capture() {
   const scrolled = await scrollAndCapture();
   const records = guildMaster ? [guildMaster, ...scrolled] : scrolled;
 
-  await syncToPocketBase(records, capturedAt);
+  // await syncToPocketBase(records, capturedAt);
   // Four back presses: members screen → main map (matches 5-click nav depth)
   for (let i = 0; i < 4; i++) {
     await clickAt({ x: config.guildCloseButtonX, y: config.guildCloseButtonY }, 800, true);

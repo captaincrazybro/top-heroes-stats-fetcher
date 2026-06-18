@@ -48,21 +48,29 @@ function resolveEventStartDate(eventType) {
   return today;
 }
 
-async function run() {
+function isRosterDay() {
+  return new Date().getUTCDay() === 0; // Sunday UTC
+}
+
+async function run({ forceRoster = false } = {}) {
   const capturedAt = new Date().toISOString();
   console.log(`[run] Starting at ${capturedAt}`);
 
   await launcher.launch();
 
   try {
-    // 1. Roster first — game on main map, guild panel not yet open
-    try {
-      const { records, capturedAt: rosterAt } = await roster.capture();
-      await csvWriter.writeRoster(records, rosterAt);
-      console.log(`[run] Roster: ${records.length} members captured`);
-    } catch (err) {
-      console.error('[run] Roster capture failed:', err.message);
-      // non-fatal — continue to event stats; game should still be near main map
+    // 1. Roster — runs weekly (Sundays UTC) in scheduled mode, always for --run-now
+    if (forceRoster || isRosterDay()) {
+      try {
+        const { records, capturedAt: rosterAt } = await roster.capture();
+        await csvWriter.writeRoster(records, rosterAt);
+        console.log(`[run] Roster: ${records.length} members captured`);
+      } catch (err) {
+        console.error('[run] Roster capture failed:', err.message);
+        // non-fatal — continue to event stats; game should still be near main map
+      }
+    } else {
+      console.log('[run] Skipping roster — scheduled roster runs Sundays only');
     }
 
     // 2. Event stats — roster.capture() left the game on the main map
@@ -105,7 +113,7 @@ async function run() {
 
 // Manual trigger
 if (process.argv.includes('--run-now')) {
-  run().catch(err => {
+  run({ forceRoster: true }).catch(err => {
     console.error('[run] Fatal error:', err);
     process.exit(1);
   });
