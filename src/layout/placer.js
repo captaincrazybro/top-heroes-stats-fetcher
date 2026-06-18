@@ -30,6 +30,16 @@ const ARROW_TOWERS = [
   { type: 'tower', col: 17, row: 17, size: 2 },
 ];
 
+// Four hardcoded positions for AOE buff players, one per quadrant.
+// Each zone is 9×9 (Chebyshev ≤ 4 from the castle's bottom tile), so pairwise
+// distances of 10+ here mean no overlap. Adjust these to taste.
+const AOE_RESERVED_SPOTS = [
+  { col: 4,  row: 4  }, // top-left quadrant
+  { col: 15, row: 4  }, // top-right quadrant
+  { col: 4,  row: 15 }, // bottom-left quadrant
+  { col: 15, row: 15 }, // bottom-right quadrant
+];
+
 function tileKey(col, row) { return `${col},${row}`; }
 
 function markTiles(col, row, size, set) {
@@ -62,18 +72,9 @@ function generateCandidates(occupiedTiles) {
   return candidates;
 }
 
-function aoeScore(candidateCol, candidateRow, placedCastles) {
-  const cc = { col: candidateCol + 0.5, row: candidateRow + 0.5 };
-  return placedCastles.filter(c => {
-    const pc = { col: c.col + 0.5, row: c.row + 0.5 };
-    return chebyshevDistance(cc, pc) <= 4;
-  }).length;
-}
-
 function placeLayout(scoredPlayers) {
   const occupied = new Set();
 
-  // Mark all fixed structures
   markTiles(FORT.col, FORT.row, FORT.size, occupied);
   for (const b of GUILD_BUILDINGS) markTiles(b.col, b.row, b.size, occupied);
   for (const b of BARRICADES)      markTiles(b.col, b.row, b.size, occupied);
@@ -81,19 +82,37 @@ function placeLayout(scoredPlayers) {
 
   const placements = [FORT, ...GUILD_BUILDINGS, ...BARRICADES, ...ARROW_TOWERS];
 
-  const activeNonAoe = scoredPlayers.filter(p => !p.inactive && !p.hasAoeBuffs)
-    .sort((a, b) => b.score - a.score);
+  // Sort active players by score descending; inactive go to inner positions last.
   const activeAoe    = scoredPlayers.filter(p => !p.inactive && p.hasAoeBuffs)
+    .sort((a, b) => b.score - a.score);
+  const activeNonAoe = scoredPlayers.filter(p => !p.inactive && !p.hasAoeBuffs)
     .sort((a, b) => b.score - a.score);
   const inactive     = scoredPlayers.filter(p => p.inactive)
     .sort((a, b) => b.score - a.score);
 
+  // Fill each reserved AOE spot: use AOE players first, backfill with non-AOE.
+  const aoeQueue    = [...activeAoe];
+  const nonAoeQueue = [...activeNonAoe];
+
+  for (const spot of AOE_RESERVED_SPOTS) {
+    const spotBlocked =
+      occupied.has(tileKey(spot.col, spot.row)) ||
+      occupied.has(tileKey(spot.col + 1, spot.row)) ||
+      occupied.has(tileKey(spot.col, spot.row + 1)) ||
+      occupied.has(tileKey(spot.col + 1, spot.row + 1));
+    if (spotBlocked) continue;
+
+    if (aoeQueue.length === 0) continue; // leave spot in candidate pool for regular placement
+    const sp = aoeQueue.shift();
+
+    markTiles(spot.col, spot.row, 2, occupied);
+    placements.push({ type: 'castle', col: spot.col, row: spot.row, size: 2, ...sp });
+  }
+
+  // Remaining active players (excess AOE then non-AOE) fill outermost open positions.
   let candidates = generateCandidates(occupied);
 
-  const castles = [];
-
-  // Assign non-AOE active players to outermost positions
-  for (const sp of activeNonAoe) {
+  for (const sp of [...aoeQueue, ...nonAoeQueue]) {
     if (candidates.length === 0) {
       console.warn(`[layout] No position available for ${sp.player.player_name}`);
       continue;
@@ -106,38 +125,10 @@ function placeLayout(scoredPlayers) {
       !occupied.has(tileKey(c.col, c.row + 1)) &&
       !occupied.has(tileKey(c.col + 1, c.row + 1))
     );
-    const castle = { type: 'castle', col: pos.col, row: pos.row, size: 2, ...sp };
-    castles.push(castle);
-    placements.push(castle);
+    placements.push({ type: 'castle', col: pos.col, row: pos.row, size: 2, ...sp });
   }
 
-  // Assign AOE players to positions maximizing coverage
-  for (const sp of activeAoe) {
-    if (candidates.length === 0) {
-      console.warn(`[layout] No position available for ${sp.player.player_name}`);
-      continue;
-    }
-    let best = candidates[0], bestScore = -1;
-    for (const c of candidates) {
-      const s = aoeScore(c.col, c.row, castles);
-      if (s > bestScore || (s === bestScore && distFromCenter(c.col, c.row) > distFromCenter(best.col, best.row))) {
-        best = c; bestScore = s;
-      }
-    }
-    candidates = candidates.filter(c => c !== best);
-    markTiles(best.col, best.row, 2, occupied);
-    candidates = candidates.filter(c =>
-      !occupied.has(tileKey(c.col, c.row)) &&
-      !occupied.has(tileKey(c.col + 1, c.row)) &&
-      !occupied.has(tileKey(c.col, c.row + 1)) &&
-      !occupied.has(tileKey(c.col + 1, c.row + 1))
-    );
-    const castle = { type: 'castle', col: best.col, row: best.row, size: 2, ...sp };
-    castles.push(castle);
-    placements.push(castle);
-  }
-
-  // Assign inactive players to innermost positions
+  // Inactive players fill innermost positions.
   let innerCandidates = [...candidates].reverse();
   for (const sp of inactive) {
     if (innerCandidates.length === 0) {
@@ -152,9 +143,7 @@ function placeLayout(scoredPlayers) {
       !occupied.has(tileKey(c.col, c.row + 1)) &&
       !occupied.has(tileKey(c.col + 1, c.row + 1))
     );
-    const castle = { type: 'castle', col: pos.col, row: pos.row, size: 2, ...sp };
-    castles.push(castle);
-    placements.push(castle);
+    placements.push({ type: 'castle', col: pos.col, row: pos.row, size: 2, ...sp });
   }
 
   return { placements };

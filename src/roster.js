@@ -390,7 +390,7 @@ async function capture() {
   const scrolled = await scrollAndCapture();
   const records = guildMaster ? [guildMaster, ...scrolled] : scrolled;
 
-  // await syncToPocketBase(records, capturedAt);
+  await syncToPocketBase(records, capturedAt);
   // Four back presses: members screen → main map (matches 5-click nav depth)
   for (let i = 0; i < 4; i++) {
     await clickAt({ x: config.guildCloseButtonX, y: config.guildCloseButtonY }, 800, true);
