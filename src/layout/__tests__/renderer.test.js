@@ -4,10 +4,10 @@ const { isoToScreen, tilePolygonPoints, lerpColor, rankBadgeColor } = require('.
 const CX = 700, TOP = 30;
 
 describe('isoToScreen', () => {
-  test('center tile (10,10) maps to (CX, TOP + 280)', () => {
+  test('center tile (10,10) maps to (CX, TOP + 440)', () => {
     const { x, y } = isoToScreen(10, 10, CX, TOP);
     expect(x).toBe(CX);          // (10-10)*32 = 0
-    expect(y).toBe(TOP + 280);   // (10+10)*14 = 280
+    expect(y).toBe(TOP + 440);   // (10+10)*22 = 440
   });
 
   test('top-corner tile (0,0) maps to (CX, TOP)', () => {
@@ -16,10 +16,10 @@ describe('isoToScreen', () => {
     expect(y).toBe(TOP);
   });
 
-  test('right-corner tile (20,0) maps to (CX+640, TOP+280)', () => {
+  test('right-corner tile (20,0) maps to (CX+640, TOP+440)', () => {
     const { x, y } = isoToScreen(20, 0, CX, TOP);
     expect(x).toBe(CX + 640);   // (20-0)*32 = 640
-    expect(y).toBe(TOP + 280);  // (20+0)*14 = 280
+    expect(y).toBe(TOP + 440);  // (20+0)*22 = 440
   });
 });
 

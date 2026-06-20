@@ -16,7 +16,13 @@ async function getClient() {
 }
 
 async function insertRecord(pb, record) {
-  await pb.collection(config.pb.collection).create(record);
+  try {
+    await pb.collection(config.pb.collection).create(record);
+  } catch (err) {
+    const detail = err.data ? JSON.stringify(err.data) : err.message;
+    console.error(`[pocketbase] Failed to create record (rank ${record.rank ?? '?'}): ${detail}`);
+    throw err;
+  }
 }
 
 async function deleteGrRecords(pb, eventStartDate) {
@@ -37,11 +43,21 @@ async function write(records, eventType) {
     await deleteGrRecords(pb, records[0].event_start_date);
   }
 
+  let written = 0;
+  const failed = [];
   for (const record of records) {
-    await insertRecord(pb, record);
+    try {
+      await insertRecord(pb, record);
+      written++;
+    } catch {
+      failed.push(record.rank ?? '?');
+    }
   }
 
-  console.log(`[pocketbase] ${records.length} records written (${eventType})`);
+  console.log(`[pocketbase] ${written}/${records.length} records written (${eventType})`);
+  if (failed.length > 0) {
+    console.error(`[pocketbase] Failed ranks: ${failed.join(', ')}`);
+  }
 }
 
 // Exposed for testing: reset the cached client between test runs

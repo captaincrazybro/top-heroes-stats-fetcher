@@ -10,6 +10,10 @@ function process(pages, guildTag) {
   for (const page of pages) {
     for (const entry of page) {
       const tag = normalizeTag(entry.guild_tag, guildTag.length);
+      if (!entry.player_name || !entry.player_name.trim()) {
+        console.log(`[aggregator] skipped rank ${entry.rank} — blank player_name`);
+        continue;
+      }
       if (tag !== guildTag) {
         console.log(`[aggregator] skipped rank ${entry.rank} "${entry.player_name}" — guild_tag "${entry.guild_tag}" (normalized: "${tag}") !== "${guildTag}"`);
         continue;

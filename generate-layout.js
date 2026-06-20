@@ -20,7 +20,19 @@ async function run() {
   console.log(`[layout] ${records.length} members loaded.`);
 
   const scored = scorePlayers(records);
-  const { placements } = placeLayout(scored);
+  const { placements, skipped, skippedInactive } = placeLayout(scored);
+
+  const castlePlaced = placements.filter(p => p.type === 'castle').length;
+  console.log(`[layout] Placed ${castlePlaced} / ${records.length} members.`);
+  if (skipped.length > 0) {
+    console.warn(`[layout] ${skipped.length} active player(s) skipped — grid full:`);
+    for (const sp of skipped) console.warn(`  - ${sp.player.player_name}`);
+  }
+  if (skippedInactive.length > 0) {
+    console.warn(`[layout] ${skippedInactive.length} inactive player(s) skipped — grid full:`);
+    for (const sp of skippedInactive) console.warn(`  - ${sp.player.player_name}`);
+  }
+
   const svg = renderSVG(placements);
 
   const outputDir = path.join(__dirname, 'output');

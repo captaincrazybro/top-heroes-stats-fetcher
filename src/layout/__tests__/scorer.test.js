@@ -4,19 +4,19 @@ const { computeScore, parseDaysOffline, scorePlayers } = require('../scorer');
 describe('computeScore', () => {
   test('uses weighted blend when main_queue_influence is present', () => {
     expect(computeScore({ main_queue_influence: 1000, influence: 500 }))
-      .toBeCloseTo(850);
+      .toBeCloseTo(975); // 1000*0.95 + 500*0.05
   });
 
-  test('falls back to influence when main_queue_influence is null', () => {
-    expect(computeScore({ main_queue_influence: null, influence: 500 })).toBe(500);
+  test('falls back to influence*0.4 when main_queue_influence is null', () => {
+    expect(computeScore({ main_queue_influence: null, influence: 500 })).toBe(200);
   });
 
-  test('falls back to influence when main_queue_influence is 0', () => {
-    expect(computeScore({ main_queue_influence: 0, influence: 500 })).toBe(500);
+  test('falls back to influence*0.4 when main_queue_influence is 0', () => {
+    expect(computeScore({ main_queue_influence: 0, influence: 500 })).toBe(200);
   });
 
-  test('falls back to influence when main_queue_influence is undefined', () => {
-    expect(computeScore({ influence: 300 })).toBe(300);
+  test('falls back to influence*0.4 when main_queue_influence is undefined', () => {
+    expect(computeScore({ influence: 300 })).toBe(120);
   });
 });
 
@@ -26,8 +26,9 @@ describe('parseDaysOffline', () => {
   test('"3 hours ago" returns 0', () => expect(parseDaysOffline('3 hours ago')).toBe(0));
   test('"4 days ago" returns 4', () => expect(parseDaysOffline('4 days ago')).toBe(4));
   test('"2 weeks ago" returns 14', () => expect(parseDaysOffline('2 weeks ago')).toBe(14));
-  test('null returns Infinity', () => expect(parseDaysOffline(null)).toBe(Infinity));
-  test('empty string returns Infinity', () => expect(parseDaysOffline('')).toBe(Infinity));
+  test('null returns 0 (treat as Online)', () => expect(parseDaysOffline(null)).toBe(0));
+  test('undefined returns 0 (treat as Online)', () => expect(parseDaysOffline(undefined)).toBe(0));
+  test('empty string returns 0 (treat as Online)', () => expect(parseDaysOffline('')).toBe(0));
   test('unknown format returns Infinity', () => expect(parseDaysOffline('last Tuesday')).toBe(Infinity));
 });
 

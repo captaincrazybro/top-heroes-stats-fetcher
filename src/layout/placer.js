@@ -1,11 +1,14 @@
 // src/layout/placer.js
 'use strict';
+const config = require('../../config');
 
-const GRID = 21;
-const CENTER = 10;
+const GRID_W  = 21; // tile columns (0..GRID_W-1)
+const GRID_H  = 21; // tile rows    (0..GRID_H-1)
+const CENTER  = 10;
 
 // Fixed structure definitions
-const FORT = { type: 'fort', col: 9, row: 9, size: 3 };
+const FORT       = { type: 'fort',       col: 9,  row: 9,  size: 3 };
+const GUILD_BOSS = { type: 'guild-boss', col: 9,  row: 12, size: 2 };
 
 const GUILD_BUILDINGS = [
   { type: 'building', col: 8, row: 9,  size: 1, subtype: 'ranch' },
@@ -20,14 +23,14 @@ const BARRICADES = [
   { type: 'barricade', col: 9,  row: 8,  size: 1 },
   { type: 'barricade', col: 10, row: 8,  size: 1 },
   { type: 'barricade', col: 11, row: 8,  size: 1 },
-  { type: 'barricade', col: 10, row: 12, size: 1 },
+  { type: 'barricade', col: 11, row: 12, size: 1 },
 ];
 
 const ARROW_TOWERS = [
-  { type: 'tower', col: 2,  row: 2,  size: 2 },
-  { type: 'tower', col: 17, row: 2,  size: 2 },
-  { type: 'tower', col: 2,  row: 17, size: 2 },
-  { type: 'tower', col: 17, row: 17, size: 2 },
+  { type: 'tower', col: 2,  row: 3,  size: 2 },
+  { type: 'tower', col: 16, row: 2,  size: 2 },
+  { type: 'tower', col: 3,  row: 17, size: 2 },
+  { type: 'tower', col: 17, row: 16, size: 2 },
 ];
 
 // Four hardcoded positions for AOE buff players, one per quadrant.
@@ -52,14 +55,26 @@ function chebyshevDistance(a, b) {
   return Math.max(Math.abs(a.col - b.col), Math.abs(a.row - b.row));
 }
 
+function nearestCandidate(candidates, refCol, refRow) {
+  if (candidates.length === 0) return null;
+  const orthogonal = candidates.filter(c => c.col === refCol || c.row === refRow);
+  const pool = orthogonal.length > 0 ? orthogonal : candidates;
+  let best = null, bestDist = Infinity;
+  for (const c of pool) {
+    const dist = Math.max(Math.abs(c.col - refCol), Math.abs(c.row - refRow));
+    if (dist < bestDist) { best = c; bestDist = dist; }
+  }
+  return best;
+}
+
 function distFromCenter(col, row) {
   return Math.hypot(col + 0.5 - CENTER, row + 0.5 - CENTER);
 }
 
 function generateCandidates(occupiedTiles) {
   const candidates = [];
-  for (let col = 0; col <= GRID - 2; col++) {
-    for (let row = 0; row <= GRID - 2; row++) {
+  for (let col = 0; col <= GRID_W - 2; col++) {
+    for (let row = 0; row <= GRID_H - 2; row++) {
       const blocked =
         occupiedTiles.has(tileKey(col, row)) ||
         occupiedTiles.has(tileKey(col + 1, row)) ||
@@ -79,8 +94,9 @@ function placeLayout(scoredPlayers) {
   for (const b of GUILD_BUILDINGS) markTiles(b.col, b.row, b.size, occupied);
   for (const b of BARRICADES)      markTiles(b.col, b.row, b.size, occupied);
   for (const t of ARROW_TOWERS)    markTiles(t.col, t.row, t.size, occupied);
+  markTiles(GUILD_BOSS.col, GUILD_BOSS.row, GUILD_BOSS.size, occupied);
 
-  const placements = [FORT, ...GUILD_BUILDINGS, ...BARRICADES, ...ARROW_TOWERS];
+  const placements = [FORT, GUILD_BOSS, ...GUILD_BUILDINGS, ...BARRICADES, ...ARROW_TOWERS];
 
   // Sort active players by score descending; inactive go to inner positions last.
   const activeAoe    = scoredPlayers.filter(p => !p.inactive && p.hasAoeBuffs)
@@ -89,6 +105,21 @@ function placeLayout(scoredPlayers) {
     .sort((a, b) => b.score - a.score);
   const inactive     = scoredPlayers.filter(p => p.inactive)
     .sort((a, b) => b.score - a.score);
+
+  // Build pair lookup and full active-player map before any placement so pair
+  // logic applies to both the AOE reserved-spot phase and the main active phase.
+  const pairLookup = new Map();
+  for (const [a, b] of (config.playerPairs || [])) {
+    if (!pairLookup.has(a)) pairLookup.set(a, []);
+    if (!pairLookup.has(b)) pairLookup.set(b, []);
+    pairLookup.get(a).push(b);
+    pairLookup.get(b).push(a);
+  }
+  const allActiveById = new Map([
+    ...activeAoe.map(sp => [sp.player.id, sp]),
+    ...activeNonAoe.map(sp => [sp.player.id, sp]),
+  ]);
+  const placedIds = new Set();
 
   // Fill each reserved AOE spot: use AOE players first, backfill with non-AOE.
   const aoeQueue    = [...activeAoe];
@@ -104,17 +135,42 @@ function placeLayout(scoredPlayers) {
 
     if (aoeQueue.length === 0) continue; // leave spot in candidate pool for regular placement
     const sp = aoeQueue.shift();
+    placedIds.add(sp.player.id);
 
     markTiles(spot.col, spot.row, 2, occupied);
     placements.push({ type: 'castle', col: spot.col, row: spot.row, size: 2, ...sp });
+
+    // BFS over pair graph: place all partners (and their partners) near their paired player.
+    const aoePairQueue = [{ id: sp.player.id, col: spot.col, row: spot.row }];
+    while (aoePairQueue.length > 0) {
+      const { id: fromId, col: fromCol, row: fromRow } = aoePairQueue.shift();
+      for (const nextId of (pairLookup.get(fromId) || [])) {
+        if (placedIds.has(nextId) || !allActiveById.has(nextId)) continue;
+        const next = allActiveById.get(nextId);
+        const chainCands = generateCandidates(occupied);
+        const nearest = nearestCandidate(chainCands, fromCol, fromRow);
+        if (!nearest) continue;
+        markTiles(nearest.col, nearest.row, 2, occupied);
+        placements.push({ type: 'castle', col: nearest.col, row: nearest.row, size: 2, ...next });
+        placedIds.add(nextId);
+        aoePairQueue.push({ id: nextId, col: nearest.col, row: nearest.row });
+      }
+    }
   }
 
   // Remaining active players (excess AOE then non-AOE) fill outermost open positions.
+  // If a player is part of a PLAYER_PAIRS entry, their partner is pulled from the
+  // queue and placed at the nearest available position immediately after them.
   let candidates = generateCandidates(occupied);
 
-  for (const sp of [...aoeQueue, ...nonAoeQueue]) {
+  const activeAll = [...aoeQueue, ...nonAoeQueue];
+
+  const skipped = [];
+
+  for (const sp of activeAll) {
+    if (placedIds.has(sp.player.id)) continue; // already placed as a pair partner
     if (candidates.length === 0) {
-      console.warn(`[layout] No position available for ${sp.player.player_name}`);
+      skipped.push(sp);
       continue;
     }
     const pos = candidates.shift();
@@ -125,16 +181,37 @@ function placeLayout(scoredPlayers) {
       !occupied.has(tileKey(c.col, c.row + 1)) &&
       !occupied.has(tileKey(c.col + 1, c.row + 1))
     );
+    placedIds.add(sp.player.id);
     placements.push({ type: 'castle', col: pos.col, row: pos.row, size: 2, ...sp });
+
+    // BFS over pair graph: place all partners (and their partners) near their paired player.
+    const pairQueue = [{ id: sp.player.id, col: pos.col, row: pos.row }];
+    while (pairQueue.length > 0) {
+      const { id: fromId, col: fromCol, row: fromRow } = pairQueue.shift();
+      for (const nextId of (pairLookup.get(fromId) || [])) {
+        if (placedIds.has(nextId) || !allActiveById.has(nextId)) continue;
+        const next = allActiveById.get(nextId);
+        const nearest = nearestCandidate(candidates, fromCol, fromRow);
+        if (!nearest) continue;
+        markTiles(nearest.col, nearest.row, 2, occupied);
+        candidates = candidates.filter(c =>
+          !occupied.has(tileKey(c.col, c.row)) &&
+          !occupied.has(tileKey(c.col + 1, c.row)) &&
+          !occupied.has(tileKey(c.col, c.row + 1)) &&
+          !occupied.has(tileKey(c.col + 1, c.row + 1))
+        );
+        placedIds.add(nextId);
+        placements.push({ type: 'castle', col: nearest.col, row: nearest.row, size: 2, ...next });
+        pairQueue.push({ id: nextId, col: nearest.col, row: nearest.row });
+      }
+    }
   }
 
-  // Inactive players fill innermost positions.
+  // Inactive players fill innermost positions; skip all if the grid is full.
   let innerCandidates = [...candidates].reverse();
+  let inactivePlaced = 0;
   for (const sp of inactive) {
-    if (innerCandidates.length === 0) {
-      console.warn(`[layout] No position available for ${sp.player.player_name}`);
-      continue;
-    }
+    if (innerCandidates.length === 0) break;
     const pos = innerCandidates.shift();
     markTiles(pos.col, pos.row, 2, occupied);
     innerCandidates = innerCandidates.filter(c =>
@@ -144,9 +221,11 @@ function placeLayout(scoredPlayers) {
       !occupied.has(tileKey(c.col + 1, c.row + 1))
     );
     placements.push({ type: 'castle', col: pos.col, row: pos.row, size: 2, ...sp });
+    inactivePlaced++;
   }
+  const skippedInactive = inactive.slice(inactivePlaced);
 
-  return { placements };
+  return { placements, skipped, skippedInactive };
 }
 
 module.exports = { chebyshevDistance, generateCandidates, placeLayout };

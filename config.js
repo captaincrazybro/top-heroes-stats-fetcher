@@ -115,6 +115,20 @@ module.exports = {
   anthropicModel: 'claude-sonnet-4-6',
   visionModel: 'gpt-5.1',
 
+  // Pairs of guild roster IDs to place adjacent to each other in the castle layout.
+  // The higher-ranked player is placed normally; their partner is placed at the
+  // nearest available position immediately after. Example: [['id1', 'id2']].
+  playerPairs: [
+    ['gzkksqn48a588tc', 's5cltxqelzqk96v'],
+    ['g8bjsfe0y6948ps', 's5cltxqelzqk96v'],
+    ['3xa8atza2cr24gm', 'c9dhndvgrm8fx97'], 
+    ['kh976snbpxedyou', 'tozle3idlem8ztq'], 
+    ['ga4lr2bkh76j3ka', 'zhjqykzpgc5x2fn'],
+    ['ga4lr2bkh76j3ka', '5ykh2ivyo41wm0j'],
+    ['ga4lr2bkh76j3ka', 'ugu4fxsfgama5h5'],
+    ['zhjqykzpgc5x2fn', 'zhs53o9qhom3crk']
+  ],
+
   pb: {
     url:                    process.env.POCKETBASE_URL,
     email:                  process.env.POCKETBASE_EMAIL,

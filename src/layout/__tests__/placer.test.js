@@ -30,7 +30,7 @@ describe('generateCandidates', () => {
     expect(d0).toBeGreaterThan(dLast);
   });
 
-  test('max col+1 and row+1 never exceed 20', () => {
+  test('max col+1 never exceeds 20, row+1 never exceeds 20', () => {
     const candidates = generateCandidates(new Set());
     expect(candidates.every(c => c.col + 1 <= 20 && c.row + 1 <= 20)).toBe(true);
   });

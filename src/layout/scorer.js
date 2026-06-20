@@ -3,12 +3,13 @@
 function computeScore(player) {
   const mqi = player.main_queue_influence;
   const inf = player.influence || 0;
-  if (mqi != null && mqi !== 0) return mqi * 0.7 + inf * 0.3;
-  return inf;
+  if (mqi != null && mqi !== 0) return mqi * 0.95 + inf * 0.05;
+  return inf * 0.4;
 }
 
 function parseDaysOffline(lastOnline) {
-  if (!lastOnline || typeof lastOnline !== 'string') return Infinity;
+  if (lastOnline == null || lastOnline === '') return 0; // null/undefined/empty → treat as Online
+  if (typeof lastOnline !== 'string') return Infinity;
   const s = lastOnline.trim();
   if (s === 'Online') return 0;
   let m;
