@@ -1,6 +1,6 @@
 // src/layout/__tests__/placer.test.js
 'use strict';
-const { chebyshevDistance, generateCandidates, generateRingCandidates, placeLayout } = require('../placer');
+const { chebyshevDistance, generateCandidates, placeLayout, generateRingCandidates, placeLayoutRing } = require('../placer');
 
 describe('chebyshevDistance', () => {
   test('same point = 0', () => expect(chebyshevDistance({ col: 5, row: 5 }, { col: 5, row: 5 })).toBe(0));
@@ -119,5 +119,65 @@ describe('generateRingCandidates', () => {
   test('max col+1 never exceeds 20, row+1 never exceeds 20', () => {
     const candidates = generateRingCandidates(new Set());
     expect(candidates.every(c => c.col + 1 <= 20 && c.row + 1 <= 20)).toBe(true);
+  });
+});
+
+describe('placeLayoutRing', () => {
+  const mockPlayers = Array.from({ length: 5 }, (_, i) => ({
+    player: { player_name: `P${i}`, rank: 'R2' },
+    score: 1000 - i * 100,
+    inactive: i >= 3,
+    hasAoeBuffs: false,
+  }));
+
+  test('includes fort structure', () => {
+    const { placements } = placeLayoutRing(mockPlayers);
+    expect(placements.some(p => p.type === 'fort')).toBe(true);
+  });
+
+  test('includes 4 arrow towers', () => {
+    const { placements } = placeLayoutRing(mockPlayers);
+    expect(placements.filter(p => p.type === 'tower').length).toBe(4);
+  });
+
+  test('includes 6 guild buildings', () => {
+    const { placements } = placeLayoutRing(mockPlayers);
+    expect(placements.filter(p => p.type === 'building').length).toBe(6);
+  });
+
+  test('includes 4 barricades', () => {
+    const { placements } = placeLayoutRing(mockPlayers);
+    expect(placements.filter(p => p.type === 'barricade').length).toBe(4);
+  });
+
+  test('all player castles are on non-overlapping tiles', () => {
+    const { placements } = placeLayoutRing(mockPlayers);
+    const usedTiles = new Set();
+    for (const p of placements.filter(p => p.type === 'castle')) {
+      for (let dc = 0; dc < 2; dc++) {
+        for (let dr = 0; dr < 2; dr++) {
+          const key = `${p.col + dc},${p.row + dr}`;
+          expect(usedTiles.has(key)).toBe(false);
+          usedTiles.add(key);
+        }
+      }
+    }
+  });
+
+  test('strongest active player is placed in Row 2 (Chebyshev d 7-8)', () => {
+    const { placements } = placeLayoutRing(mockPlayers);
+    const castles = placements.filter(p => p.type === 'castle');
+    // P0 (score 1000) is strongest; find their placement
+    const strongest = castles.find(p => p.player && p.player.player_name === 'P0');
+    expect(strongest).toBeDefined();
+    const d = Math.max(Math.abs(strongest.col - 10), Math.abs(strongest.row - 10));
+    expect(d).toBeGreaterThanOrEqual(7);
+    expect(d).toBeLessThanOrEqual(8);
+  });
+
+  test('returns skipped and skippedInactive arrays', () => {
+    const { skipped, skippedInactive } = placeLayoutRing(mockPlayers);
+    expect(Array.isArray(skipped)).toBe(true);
+    expect(Array.isArray(skippedInactive)).toBe(true);
   });
 });

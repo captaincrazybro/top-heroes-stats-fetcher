@@ -266,4 +266,132 @@ function placeLayout(scoredPlayers) {
   return { placements, skipped, skippedInactive };
 }
 
-module.exports = { chebyshevDistance, generateCandidates, generateRingCandidates, placeLayout };
+function placeLayoutRing(scoredPlayers) {
+  const occupied = new Set();
+
+  markTiles(FORT.col, FORT.row, FORT.size, occupied);
+  for (const b of GUILD_BUILDINGS) markTiles(b.col, b.row, b.size, occupied);
+  for (const b of BARRICADES)      markTiles(b.col, b.row, b.size, occupied);
+  for (const t of ARROW_TOWERS)    markTiles(t.col, t.row, t.size, occupied);
+  markTiles(GUILD_BOSS.col, GUILD_BOSS.row, GUILD_BOSS.size, occupied);
+
+  const placements = [FORT, GUILD_BOSS, ...GUILD_BUILDINGS, ...BARRICADES, ...ARROW_TOWERS];
+
+  const activeAoe    = scoredPlayers.filter(p => !p.inactive && p.hasAoeBuffs)
+    .sort((a, b) => b.score - a.score);
+  const activeNonAoe = scoredPlayers.filter(p => !p.inactive && !p.hasAoeBuffs)
+    .sort((a, b) => b.score - a.score);
+  const inactive     = scoredPlayers.filter(p => p.inactive)
+    .sort((a, b) => b.score - a.score);
+
+  const pairLookup = new Map();
+  for (const [a, b] of (config.playerPairs || [])) {
+    if (!pairLookup.has(a)) pairLookup.set(a, []);
+    if (!pairLookup.has(b)) pairLookup.set(b, []);
+    pairLookup.get(a).push(b);
+    pairLookup.get(b).push(a);
+  }
+  const allActiveById = new Map([
+    ...activeAoe.map(sp => [sp.player.id, sp]),
+    ...activeNonAoe.map(sp => [sp.player.id, sp]),
+  ]);
+  const placedIds = new Set();
+
+  const aoeQueue    = [...activeAoe];
+  const nonAoeQueue = [...activeNonAoe];
+
+  for (const spot of AOE_RESERVED_SPOTS) {
+    const spotBlocked =
+      occupied.has(tileKey(spot.col, spot.row)) ||
+      occupied.has(tileKey(spot.col + 1, spot.row)) ||
+      occupied.has(tileKey(spot.col, spot.row + 1)) ||
+      occupied.has(tileKey(spot.col + 1, spot.row + 1));
+    if (spotBlocked) continue;
+
+    if (aoeQueue.length === 0) continue;
+    const sp = aoeQueue.shift();
+    placedIds.add(sp.player.id);
+
+    markTiles(spot.col, spot.row, 2, occupied);
+    placements.push({ type: 'castle', col: spot.col, row: spot.row, size: 2, ...sp });
+
+    const aoePairQueue = [{ id: sp.player.id, col: spot.col, row: spot.row }];
+    while (aoePairQueue.length > 0) {
+      const { id: fromId, col: fromCol, row: fromRow } = aoePairQueue.shift();
+      for (const nextId of (pairLookup.get(fromId) || [])) {
+        if (placedIds.has(nextId) || !allActiveById.has(nextId)) continue;
+        const next = allActiveById.get(nextId);
+        const chainCands = generateRingCandidates(occupied);
+        const nearest = nearestCandidate(chainCands, fromCol, fromRow);
+        if (!nearest) continue;
+        markTiles(nearest.col, nearest.row, 2, occupied);
+        placements.push({ type: 'castle', col: nearest.col, row: nearest.row, size: 2, ...next });
+        placedIds.add(nextId);
+        aoePairQueue.push({ id: nextId, col: nearest.col, row: nearest.row });
+      }
+    }
+  }
+
+  let candidates = generateRingCandidates(occupied);
+  const activeAll = [...aoeQueue, ...nonAoeQueue];
+  const skipped = [];
+
+  for (const sp of activeAll) {
+    if (placedIds.has(sp.player.id)) continue;
+    if (candidates.length === 0) { skipped.push(sp); continue; }
+    const pos = candidates.shift();
+    markTiles(pos.col, pos.row, 2, occupied);
+    candidates = candidates.filter(c =>
+      !occupied.has(tileKey(c.col, c.row)) &&
+      !occupied.has(tileKey(c.col + 1, c.row)) &&
+      !occupied.has(tileKey(c.col, c.row + 1)) &&
+      !occupied.has(tileKey(c.col + 1, c.row + 1))
+    );
+    placedIds.add(sp.player.id);
+    placements.push({ type: 'castle', col: pos.col, row: pos.row, size: 2, ...sp });
+
+    const pairQueue = [{ id: sp.player.id, col: pos.col, row: pos.row }];
+    while (pairQueue.length > 0) {
+      const { id: fromId, col: fromCol, row: fromRow } = pairQueue.shift();
+      for (const nextId of (pairLookup.get(fromId) || [])) {
+        if (placedIds.has(nextId) || !allActiveById.has(nextId)) continue;
+        const next = allActiveById.get(nextId);
+        const nearest = nearestCandidate(candidates, fromCol, fromRow);
+        if (!nearest) continue;
+        markTiles(nearest.col, nearest.row, 2, occupied);
+        candidates = candidates.filter(c =>
+          !occupied.has(tileKey(c.col, c.row)) &&
+          !occupied.has(tileKey(c.col + 1, c.row)) &&
+          !occupied.has(tileKey(c.col, c.row + 1)) &&
+          !occupied.has(tileKey(c.col + 1, c.row + 1))
+        );
+        placedIds.add(nextId);
+        placements.push({ type: 'castle', col: nearest.col, row: nearest.row, size: 2, ...next });
+        pairQueue.push({ id: nextId, col: nearest.col, row: nearest.row });
+      }
+    }
+  }
+
+  // Inactive players fill weakest spots first.
+  // Reversing ring candidates gives Row4 → Row1 → Row3 → Row2 order.
+  let innerCandidates = [...candidates].reverse();
+  let inactivePlaced = 0;
+  for (const sp of inactive) {
+    if (innerCandidates.length === 0) break;
+    const pos = innerCandidates.shift();
+    markTiles(pos.col, pos.row, 2, occupied);
+    innerCandidates = innerCandidates.filter(c =>
+      !occupied.has(tileKey(c.col, c.row)) &&
+      !occupied.has(tileKey(c.col + 1, c.row)) &&
+      !occupied.has(tileKey(c.col, c.row + 1)) &&
+      !occupied.has(tileKey(c.col + 1, c.row + 1))
+    );
+    placements.push({ type: 'castle', col: pos.col, row: pos.row, size: 2, ...sp });
+    inactivePlaced++;
+  }
+  const skippedInactive = inactive.slice(inactivePlaced);
+
+  return { placements, skipped, skippedInactive };
+}
+
+module.exports = { chebyshevDistance, generateCandidates, generateRingCandidates, placeLayout, placeLayoutRing };
