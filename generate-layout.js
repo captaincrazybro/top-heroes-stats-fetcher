@@ -5,11 +5,12 @@ const path = require('path');
 const sharp = require('sharp');
 const { fetchRoster }  = require('./src/layout/fetcher');
 const { scorePlayers } = require('./src/layout/scorer');
-const { placeLayout }  = require('./src/layout/placer');
+const { placeLayout, placeLayoutRing } = require('./src/layout/placer');
 const { renderSVG }    = require('./src/layout/renderer');
 
 async function run() {
-  console.log('[layout] Fetching guild roster...');
+  const useRing = process.argv.includes('--ring');
+  console.log(`[layout] Fetching guild roster... (profile: ${useRing ? 'ring' : 'standard'})`);
   const records = await fetchRoster();
 
   if (records.length === 0) {
@@ -20,7 +21,9 @@ async function run() {
   console.log(`[layout] ${records.length} members loaded.`);
 
   const scored = scorePlayers(records);
-  const { placements, skipped, skippedInactive } = placeLayout(scored);
+  const { placements, skipped, skippedInactive } = useRing
+    ? placeLayoutRing(scored)
+    : placeLayout(scored);
 
   const castlePlaced = placements.filter(p => p.type === 'castle').length;
   console.log(`[layout] Placed ${castlePlaced} / ${records.length} members.`);
@@ -39,8 +42,9 @@ async function run() {
   if (!fs.existsSync(outputDir)) fs.mkdirSync(outputDir, { recursive: true });
 
   const date = new Date().toISOString().slice(0, 10);
-  const pngPath = path.join(outputDir, `guild-layout-${date}.png`);
-  const svgPath = path.join(outputDir, `guild-layout-${date}.svg`);
+  const profileSuffix = useRing ? '-ring' : '';
+  const pngPath = path.join(outputDir, `guild-layout${profileSuffix}-${date}.png`);
+  const svgPath = path.join(outputDir, `guild-layout${profileSuffix}-${date}.svg`);
 
   try {
     const png = await sharp(Buffer.from(svg)).png().toBuffer();

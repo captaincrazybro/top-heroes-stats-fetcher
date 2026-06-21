@@ -12,6 +12,7 @@
     "run-roster": "node run-roster.js",
     "run-events": "node run-events.js",
     "layout": "node generate-layout.js",
+    "layout:ring": "node generate-layout.js --ring",
     "install-service": "node install-service.js",
     "uninstall-service": "node uninstall-service.js",
     "test": "jest",
