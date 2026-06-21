@@ -43,6 +43,16 @@ const AOE_RESERVED_SPOTS = [
   { col: 15, row: 15 }, // bottom-right quadrant
 ];
 
+// Row fill priority for the ring layout profile.
+// Each entry is [dMin, dMax]; index in array = priority (lower = placed first).
+// Row 2 (d7-8) strongest, Row 3 (d5-6), Row 1 (d9-10), Row 4 (d3-4) weakest.
+const RING_PRIORITIES = [
+  [7, 8],   // Row 2
+  [5, 6],   // Row 3
+  [9, 10],  // Row 1
+  [3, 4],   // Row 4
+];
+
 function tileKey(col, row) { return `${col},${row}`; }
 
 function markTiles(col, row, size, set) {
@@ -71,6 +81,14 @@ function distFromCenter(col, row) {
   return Math.hypot(col + 0.5 - CENTER, row + 0.5 - CENTER);
 }
 
+function ringPriority(d) {
+  for (let i = 0; i < RING_PRIORITIES.length; i++) {
+    const [lo, hi] = RING_PRIORITIES[i];
+    if (d >= lo && d <= hi) return i;
+  }
+  return Infinity;
+}
+
 function generateCandidates(occupiedTiles) {
   const candidates = [];
   for (let col = 0; col <= GRID_W - 2; col++) {
@@ -85,6 +103,26 @@ function generateCandidates(occupiedTiles) {
   }
   candidates.sort((a, b) => distFromCenter(b.col, b.row) - distFromCenter(a.col, a.row));
   return candidates;
+}
+
+function generateRingCandidates(occupiedTiles) {
+  const candidates = [];
+  for (let col = 0; col <= GRID_W - 2; col++) {
+    for (let row = 0; row <= GRID_H - 2; row++) {
+      const blocked =
+        occupiedTiles.has(tileKey(col, row)) ||
+        occupiedTiles.has(tileKey(col + 1, row)) ||
+        occupiedTiles.has(tileKey(col, row + 1)) ||
+        occupiedTiles.has(tileKey(col + 1, row + 1));
+      if (blocked) continue;
+      const d = Math.max(Math.abs(col - CENTER), Math.abs(row - CENTER));
+      const priority = ringPriority(d);
+      if (priority === Infinity) continue;
+      candidates.push({ col, row, _p: priority, _d: distFromCenter(col, row) });
+    }
+  }
+  candidates.sort((a, b) => a._p !== b._p ? a._p - b._p : b._d - a._d);
+  return candidates.map(({ col, row }) => ({ col, row }));
 }
 
 function placeLayout(scoredPlayers) {
@@ -228,4 +266,4 @@ function placeLayout(scoredPlayers) {
   return { placements, skipped, skippedInactive };
 }
 
-module.exports = { chebyshevDistance, generateCandidates, placeLayout };
+module.exports = { chebyshevDistance, generateCandidates, generateRingCandidates, placeLayout };
