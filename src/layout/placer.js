@@ -115,9 +115,14 @@ function generateRingCandidates(occupiedTiles) {
         occupiedTiles.has(tileKey(col, row + 1)) ||
         occupiedTiles.has(tileKey(col + 1, row + 1));
       if (blocked) continue;
-      const d = Math.max(Math.abs(col - CENTER), Math.abs(row - CENTER));
-      const priority = ringPriority(d);
-      if (priority === Infinity) continue;
+      const ds = [
+        Math.max(Math.abs(col - CENTER),     Math.abs(row - CENTER)),
+        Math.max(Math.abs(col + 1 - CENTER), Math.abs(row - CENTER)),
+        Math.max(Math.abs(col - CENTER),     Math.abs(row + 1 - CENTER)),
+        Math.max(Math.abs(col + 1 - CENTER), Math.abs(row + 1 - CENTER)),
+      ];
+      const priority = ringPriority(ds[0]);
+      if (priority === Infinity || ds.some(d => ringPriority(d) !== priority)) continue;
       candidates.push({ col, row, _p: priority, _d: distFromCenter(col, row) });
     }
   }

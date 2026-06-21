@@ -120,6 +120,12 @@ describe('generateRingCandidates', () => {
     const candidates = generateRingCandidates(new Set());
     expect(candidates.every(c => c.col + 1 <= 20 && c.row + 1 <= 20)).toBe(true);
   });
+
+  test('excludes footprints that straddle row band boundaries', () => {
+    const candidates = generateRingCandidates(new Set());
+    // (1,1) has tiles at Chebyshev d=8 (Row2) and d=9 (Row1) — straddles, must be excluded
+    expect(candidates.some(c => c.col === 1 && c.row === 1)).toBe(false);
+  });
 });
 
 describe('placeLayoutRing', () => {
