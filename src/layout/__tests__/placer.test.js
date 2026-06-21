@@ -180,4 +180,22 @@ describe('placeLayoutRing', () => {
     expect(Array.isArray(skipped)).toBe(true);
     expect(Array.isArray(skippedInactive)).toBe(true);
   });
+
+  test('AOE buff player is placed at an AOE reserved spot', () => {
+    const players = [
+      { player: { player_name: 'AoePlayer', rank: 'R2' }, score: 1000, inactive: false, hasAoeBuffs: true },
+      { player: { player_name: 'Regular', rank: 'R2' }, score: 900, inactive: false, hasAoeBuffs: false },
+    ];
+    const AOE_SPOTS = [
+      { col: 4, row: 4 },
+      { col: 15, row: 4 },
+      { col: 4, row: 15 },
+      { col: 15, row: 15 },
+    ];
+    const { placements } = placeLayoutRing(players);
+    const aoeCastle = placements.find(p => p.type === 'castle' && p.player && p.player.player_name === 'AoePlayer');
+    expect(aoeCastle).toBeDefined();
+    const onReservedSpot = AOE_SPOTS.some(s => s.col === aoeCastle.col && s.row === aoeCastle.row);
+    expect(onReservedSpot).toBe(true);
+  });
 });
