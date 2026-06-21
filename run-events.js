@@ -23,11 +23,12 @@ function getEventSundayStart() {
 
 function resolveEventStartDate(eventType) {
   if (eventType !== 'GR') {
-    state.clearGrEventStartDate();
     return getEventSundayStart();
   }
+  const weekStart = getEventSundayStart();
   const stored = state.getGrEventStartDate();
-  if (stored) return stored;
+  // Reuse stored date only if it falls within the current week.
+  if (stored && stored >= weekStart) return stored;
   const today = todayUTC();
   state.setGrEventStartDate(today);
   return today;

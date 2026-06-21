@@ -26,7 +26,9 @@ async function insertRecord(pb, record) {
 }
 
 async function deleteGrRecords(pb, eventStartDate) {
-  const filter = `event_type = "GR" && event_start_date = "${eventStartDate}"`;
+  const nextDay = new Date(eventStartDate);
+  nextDay.setUTCDate(nextDay.getUTCDate() + 1);
+  const filter = `event_type = "GR" && event_start_date >= "${eventStartDate} 00:00:00" && event_start_date < "${nextDay.toISOString().slice(0, 10)} 00:00:00"`;
   const existing = await pb.collection(config.pb.collection).getFullList({ filter });
   for (const record of existing) {
     await pb.collection(config.pb.collection).delete(record.id);
