@@ -2,11 +2,33 @@
 require('dotenv').config();
 const fs = require('fs');
 const path = require('path');
+const readline = require('readline');
 const sharp = require('sharp');
+const PocketBase = require('pocketbase').default;
+const config = require('./config');
 const { fetchRoster }  = require('./src/layout/fetcher');
 const { scorePlayers } = require('./src/layout/scorer');
 const { placeLayout, placeLayoutRing } = require('./src/layout/placer');
 const { renderSVG }    = require('./src/layout/renderer');
+
+async function askUpload() {
+  const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+  return new Promise(resolve => {
+    rl.question('[layout] Upload to PocketBase? [y/N] ', answer => {
+      rl.close();
+      resolve(/^y(es)?$/i.test(answer.trim()));
+    });
+  });
+}
+
+async function uploadLayout(pngPath) {
+  const pb = new PocketBase(config.pb.url);
+  await pb.collection('_superusers').authWithPassword(config.pb.email, config.pb.password);
+  const pngBuffer = fs.readFileSync(pngPath);
+  const file = new File([pngBuffer], path.basename(pngPath), { type: 'image/png' });
+  await pb.collection('topHeroesCastleLayouts').create({ image: file });
+  console.log('[layout] Uploaded to topHeroesCastleLayouts.');
+}
 
 async function run() {
   const useRing = process.argv.includes('--ring');
@@ -46,14 +68,27 @@ async function run() {
   const pngPath = path.join(outputDir, `guild-layout${profileSuffix}-${date}.png`);
   const svgPath = path.join(outputDir, `guild-layout${profileSuffix}-${date}.svg`);
 
+  let pngWritten = false;
   try {
     const png = await sharp(Buffer.from(svg)).png().toBuffer();
     fs.writeFileSync(pngPath, png);
     console.log(`[layout] PNG written to ${pngPath}`);
+    pngWritten = true;
   } catch (err) {
     console.error('[layout] sharp rasterization failed:', err.message);
     fs.writeFileSync(svgPath, svg);
     console.log(`[layout] Raw SVG written to ${svgPath}`);
+  }
+
+  if (pngWritten) {
+    const upload = await askUpload();
+    if (upload) {
+      try {
+        await uploadLayout(pngPath);
+      } catch (err) {
+        console.error('[layout] Upload failed:', err.message);
+      }
+    }
   }
 }
 

@@ -126,7 +126,9 @@ module.exports = {
     ['ga4lr2bkh76j3ka', 'zhjqykzpgc5x2fn'],
     ['ga4lr2bkh76j3ka', '5ykh2ivyo41wm0j'],
     ['ga4lr2bkh76j3ka', 'ugu4fxsfgama5h5'],
-    ['zhjqykzpgc5x2fn', 'zhs53o9qhom3crk']
+    ['zhjqykzpgc5x2fn', 'zhs53o9qhom3crk'],
+    ['ezoszrxb5qfiodt', 'eapx3h2tewwiq3n'],
+    ['eapx3h2tewwiq3n', 'xz1k1py4o4v5gff'],
   ],
 
   pb: {

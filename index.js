@@ -32,6 +32,20 @@ function getEventSundayStart() {
   return sunday.toISOString().slice(0, 10);
 }
 
+// GR resets Sunday 10 PM CDT = Monday 3 AM UTC. Returns the Monday (YYYY-MM-DD)
+// that started the current GR week, accounting for the reset hour so that running
+// before 3 AM UTC still returns the previous week's Monday.
+function getGrWeekStartDate() {
+  const RESET_HOUR_UTC = 3;
+  const shifted = new Date(Date.now() - RESET_HOUR_UTC * 3600000);
+  const shiftedDay = shifted.getUTCDay(); // 0=Sun, 1=Mon, ..., 6=Sat
+  const daysBackToMonday = shiftedDay === 0 ? 6 : shiftedDay - 1;
+  const monday = new Date(shifted);
+  monday.setUTCDate(shifted.getUTCDate() - daysBackToMonday);
+  monday.setUTCHours(0, 0, 0, 0);
+  return monday.toISOString().slice(0, 10);
+}
+
 function resolveEventStartDate(eventType) {
   if (eventType !== 'GR') {
     // Clear stored GR date when a non-GR event is active so the next GR cycle
@@ -40,12 +54,16 @@ function resolveEventStartDate(eventType) {
     return getEventSundayStart(); // GAR/KvK: use the week's Sunday start
   }
 
+  const currentWeekStart = getGrWeekStartDate();
   const stored = state.getGrEventStartDate();
-  if (stored) return stored;
+  if (stored && stored >= currentWeekStart) {
+    const nextWeekStart = new Date(currentWeekStart + 'T00:00:00Z');
+    nextWeekStart.setUTCDate(nextWeekStart.getUTCDate() + 7);
+    if (stored < nextWeekStart.toISOString().slice(0, 10)) return stored;
+  }
 
-  const today = todayUTC();
-  state.setGrEventStartDate(today);
-  return today;
+  state.setGrEventStartDate(currentWeekStart);
+  return currentWeekStart;
 }
 
 function isRosterDay() {

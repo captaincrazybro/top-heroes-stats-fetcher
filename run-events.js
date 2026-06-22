@@ -21,17 +21,34 @@ function getEventSundayStart() {
   return sunday.toISOString().slice(0, 10);
 }
 
+// GR resets Sunday 10 PM CDT = Monday 3 AM UTC. Returns the Monday (YYYY-MM-DD)
+// that started the current GR week, accounting for the reset hour so that running
+// before 3 AM UTC still returns the previous week's Monday.
+function getGrWeekStartDate() {
+  const RESET_HOUR_UTC = 3;
+  const shifted = new Date(Date.now() - RESET_HOUR_UTC * 3600000);
+  const shiftedDay = shifted.getUTCDay();
+  const daysBackToMonday = shiftedDay === 0 ? 6 : shiftedDay - 1;
+  const monday = new Date(shifted);
+  monday.setUTCDate(shifted.getUTCDate() - daysBackToMonday);
+  monday.setUTCHours(0, 0, 0, 0);
+  return monday.toISOString().slice(0, 10);
+}
+
 function resolveEventStartDate(eventType) {
   if (eventType !== 'GR') {
     return getEventSundayStart();
   }
-  const weekStart = getEventSundayStart();
+  const currentWeekStart = getGrWeekStartDate();
   const stored = state.getGrEventStartDate();
-  // Reuse stored date only if it falls within the current week.
-  if (stored && stored >= weekStart) return stored;
-  const today = todayUTC();
-  state.setGrEventStartDate(today);
-  return today;
+  // Reuse stored date only if it falls within the current game week.
+  if (stored && stored >= currentWeekStart) {
+    const nextWeekStart = new Date(currentWeekStart + 'T00:00:00Z');
+    nextWeekStart.setUTCDate(nextWeekStart.getUTCDate() + 7);
+    if (stored < nextWeekStart.toISOString().slice(0, 10)) return stored;
+  }
+  state.setGrEventStartDate(currentWeekStart);
+  return currentWeekStart;
 }
 
 async function run() {
